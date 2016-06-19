@@ -3,7 +3,7 @@ from setuptools import setup
 setup(name='juno-magic',
       version='0.1',
       description='IPython magics and utilities to work with bridged kernels',
-      url='https://bitbucket.com/pramukta/juno-magic',
+      url='https://github.com/timbr-io/juno-magic',
       author='Pramukta Kumar',
       author_email='pramukta.kumar@timbr.io',
       license='MIT',
