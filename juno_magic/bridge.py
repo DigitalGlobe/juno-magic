@@ -46,7 +46,7 @@ class ZmqProxyConnection(ZmqSubConnection):
         ZmqSubConnection.__init__(self, _zmq_factory, ZmqEndpoint('connect', endpoint.encode("utf-8")))
         self.subscribe(b"")
 
-    def gotMessage(self, message, header):
+    def gotMessage(self, message, header=""):
         # log.msg("[MachineConnection] {} {}".format(header, message))
         self._wamp.publish(self._prefix, [str(header), json.loads(message.decode("utf-8"))])
 
@@ -112,6 +112,13 @@ def build_bridge_class(client):
                     log.msg("ValueError")
                 except Empty:
                     yield sleep(0.1)
+
+        def proxy_heartbeat_channel(self):
+            with open(client.connection_file) as f:
+                config = json.load(f)
+            endpoint = "tcp://127.0.0.1:{}".format(config["hb_port"])
+            prefix = "io.timbr.kernel.{}.hb".format(_key)
+            self.heartbeat_connection = ZmqProxyConnection(endpoint, self, prefix)
 
         def proxy_machine_channel(self):
             """
@@ -182,6 +189,13 @@ def build_bridge_class(client):
                 pass
             finally:
                 self.proxy_machine_channel()
+            try:
+                self.heartbeat_connection.shutdown()
+            except AttributeError:
+                pass
+            finally:
+                self.proxy_heartbeat_channel()
+
             log.msg("[onJoin] ...done.")
             log.msg(client.hb_channel._running)
 
@@ -232,7 +246,9 @@ def main():
     def reconnector():
         while True:
             try:
+                log.msg("Attempting to connect...")
                 wampconnection = yield _bridge_runner.run(build_bridge_class(client), start_reactor=False)
+                log.msg(wampconnection)
                 yield sleep(10.0) # Give the connection time to set _session
                 while wampconnection.isOpen():
                     yield sleep(5.0)
