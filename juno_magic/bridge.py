@@ -131,7 +131,7 @@ def build_bridge_class(client):
 
         @wamp.register(u"io.timbr.kernel.{}.ping".format(_key))
         def ping(self):
-            return True
+            return client.is_alive()
 
         @inlineCallbacks
         def is_active(self, prefix):
