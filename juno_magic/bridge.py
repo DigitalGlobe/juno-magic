@@ -57,7 +57,6 @@ def build_bridge_class(client):
         iopub_deferred = None
         prefix_list = set()
         machine_connection = None
-        heartbeat_connection = None
         @wamp.register(u"io.timbr.kernel.{}.execute".format(_key))
         @inlineCallbacks
         def execute(self, *args, **kwargs):
@@ -112,13 +111,6 @@ def build_bridge_class(client):
                     log.msg("ValueError")
                 except Empty:
                     yield sleep(0.1)
-
-        def proxy_heartbeat_channel(self):
-            with open(client.connection_file) as f:
-                config = json.load(f)
-            endpoint = "tcp://127.0.0.1:{}".format(config["hb_port"])
-            prefix = "io.timbr.kernel.{}.hb".format(_key)
-            self.heartbeat_connection = ZmqProxyConnection(endpoint, self, prefix)
 
         def proxy_machine_channel(self):
             """
@@ -189,12 +181,6 @@ def build_bridge_class(client):
                 pass
             finally:
                 self.proxy_machine_channel()
-            try:
-                self.heartbeat_connection.shutdown()
-            except AttributeError:
-                pass
-            finally:
-                self.proxy_heartbeat_channel()
 
             log.msg("[onJoin] ...done.")
             log.msg(client.hb_channel._running)
