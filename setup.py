@@ -21,6 +21,7 @@ setup(name='juno-magic',
           "txzmq",
           "sh",
           "pyopenssl",
-          "service_identity"
+          "service_identity",
+          "requests"
         ]
       )
