@@ -22,6 +22,7 @@ setup(name='juno-magic',
           "sh",
           "pyopenssl",
           "service_identity",
-          "requests"
+          "requests",
+          "zope.interface"
         ]
       )
