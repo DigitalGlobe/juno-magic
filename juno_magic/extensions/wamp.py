@@ -12,6 +12,7 @@ import sys
 import shlex
 import json
 from time import sleep
+from itertools import ifilter
 
 if sys.version.startswith("3"):
     unicode = str
@@ -27,6 +28,7 @@ except ReactorAlreadyInstalledError:
     pass
 
 from twisted.python import log
+from twisted.internet import reactor, threads
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
 from autobahn.twisted.wamp import ApplicationSession
 from autobahn import wamp
@@ -38,6 +40,11 @@ from juno_magic.runner import JunoRunner
 from collections import deque
 
 from sh import wampify
+
+import requests
+
+
+JUNO_KERNEL_URI = "https://juno.timbr.io/api/kernels/list"
 
 
 def publish_to_display(obj):
@@ -184,9 +191,10 @@ class JunoMagics(Magics):
         connect_parser.add_argument("--reconnect", help="Force reconnection even if we don't need to.", action="store_true")
         connect_parser.set_defaults(fn=self.connect)
         list_parser = subparsers.add_parser("list", help="List registered kernel prefixes")
+        list_parser.add_argument("--details", help="Display detailed information about existing kernels", action="store_true")
         list_parser.set_defaults(fn=self.list)
         select_parser = subparsers.add_parser("select", help="Select a remote kernel to make active")
-        select_parser.add_argument("prefix", help="Prefix for accessing the remote kernel", nargs="?")
+        select_parser.add_argument("kernel", help="Kernel name or prefix id for accessing the remote kernel", nargs="?")
         select_parser.set_defaults(fn=self.select)
         start_bridge_parser = subparsers.add_parser("start_bridge", help="Expose this kernel over WAMP for remote access")
         start_bridge_parser.add_argument("wamp_url", help="WAMP router url to expose over", default=self._router_url, nargs="?")
@@ -266,21 +274,30 @@ class JunoMagics(Magics):
                 pass
         except ApplicationError:
             output = []
+        if kwargs.get("details"):
+            prefix_map = yield threads.deferToThread(self._get_kernel_names, output)
+            publish_to_display(prefix_map)
         returnValue(output)
 
     @inlineCallbacks
-    def select(self, prefix, **kwargs):
-        if prefix == self._kernel_prefix:
-            print("Kernel [{}] already selected".format(prefix))
+    def select(self, kernel, **kwargs):
+        yield self._connected
+        prefix_list = yield self.list()
+        prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list)
+        matches = list(ifilter(lambda t: kernel in t, prefix_map.items()))
+        if len(matches) == 0:
+            print("No kernels found with name or prefix {}".format(kernel))
+        elif len(matches) > 1:
+            print("Two or more kernels named {} found, please specify prefix of interest")
+            publish_to_display({k: v for k, v in matches})
         else:
-            yield self._connected
-            prefix_list = yield self.list()
-            if prefix in prefix_list:
+            prefix, name = matches.pop()
+            if prefix == self._kernel_prefix:
+                print("Kernel [{}: {}] already selected".format(prefix, name))
+            else:
                 self._kernel_prefix = prefix
                 yield self._wamp.set_prefix(prefix)
-                print("Kernel Selected [{}]".format(prefix))
-            else:
-                print("Prefix not found [{}]".format(prefix))
+                print("Kernel selected [{}: {}]".format(prefix, name))
 
     @inlineCallbacks
     def subscribe(self, callback, **kwargs):
@@ -294,3 +311,10 @@ class JunoMagics(Magics):
         if prefix is not None:
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
         output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
+
+    def _get_kernel_names(self, prefix_list):
+        headers = {"Authorization": "Bearer {}".format(self._token)}
+        payload = {"addresses": [prefix.split(".")[-1] for prefix in prefix_list]}
+        r = requests.post(JUNO_KERNEL_URI, headers=headers, data=payload)
+        prefix_map = {".".join(['io.timbr.kernel', k]): v for k, v in r.json().iteritems()}
+        return prefix_map
