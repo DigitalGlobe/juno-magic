@@ -42,6 +42,7 @@ from collections import deque
 from sh import wampify
 
 import requests
+import re
 
 
 JUNO_KERNEL_URI = "https://juno.timbr.io/api/kernels/list"
@@ -67,23 +68,24 @@ def build_bridge_class(magics_instance):
         _ipython = get_ipython()
         _msg_id_lut = deque(maxlen=10)
         _machine_callbacks = []
+        _iopub_sub = None
+        _machine_sub = None
+
+        @inlineCallbacks
+        def reset_prefix(self):
+            if self._iopub_sub:
+                yield self._iopub_sub.unsubscribe()
+                self._iopub_sub = None
+            if self._machine_sub:
+                yield self._machine_sub.unsubscribe()
+                self._machine_sub = None
+            returnValue(None)
 
         @inlineCallbacks
         def set_prefix(self, prefix):
-            try:
-                yield self.unsubscribe(u".".join([self._wamp_prefix, u"iopub"]))
-            except Exception as e:
-                log.msg("Unable to unsubscribe")
-                log.msg(str(e))
-
-            try:
-                yield self.unsubscribe(u".".join([self._wamp_prefix, u"machine"]))
-            except Exception as e:
-                log.msg("Unable to unsubscribe")
-                log.msg(str(e))
-
+            yield self.reset_prefix()
             self._wamp_prefix = unicode(prefix)
-            yield self.subscribe(self.on_iopub, u".".join([self._wamp_prefix, u"iopub"]))
+            self._iopub_sub = yield self.subscribe(self.on_iopub, u".".join([self._wamp_prefix, u"iopub"]))
             # try:
             #     yield self.subscribe(self.on_machine, u".".join([self._wamp_prefix, u"machine"]))
             # except:
@@ -281,23 +283,29 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def select(self, kernel, **kwargs):
+        @inlineCallbacks
+        def _select(prefix):
+            yield self._wamp.reset_prefix()
+            if self._kernel_prefix:
+                print("Successfully unsubscribed from prefix {}".format(self._kernel_prefix))
+            else:
+                print("No previous subscriptions")
+            self._kernel_prefix = prefix
+            yield self._wamp.set_prefix(prefix)
+            print("Kernel selected [{}]".format(prefix))
+
         yield self._connected
         prefix_list = yield self.list()
-        prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list)
-        matches = list(ifilter(lambda t: kernel in t, prefix_map.items()))
-        if len(matches) == 0:
-            print("No kernels found with name or prefix {}".format(kernel))
-        elif len(matches) > 1:
-            print("Two or more kernels named {} found, please specify prefix of interest")
-            publish_to_display({k: v for k, v in matches})
-        else:
-            prefix, name = matches.pop()
-            if prefix == self._kernel_prefix:
-                print("Kernel [{}: {}] already selected".format(prefix, name))
+        is_kernel_key = lambda t: re.match(r'io\.timbr\.kernel\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', t)
+        if not is_kernel_key(kernel):
+            prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list)
+            if kernel not in prefix_map:
+                print("Kernel not in prefix map")
+                returnValue(None)
             else:
-                self._kernel_prefix = prefix
-                yield self._wamp.set_prefix(prefix)
-                print("Kernel selected [{}: {}]".format(prefix, name))
+                kernel = prefix_map[kernel]
+        if kernel in prefix_list and kernel != self._kernel_prefix:
+            yield _select(kernel)
 
     @inlineCallbacks
     def subscribe(self, callback, **kwargs):
@@ -316,5 +324,5 @@ class JunoMagics(Magics):
         headers = {"Authorization": "Bearer {}".format(self._token)}
         payload = {"addresses": [prefix.split(".")[-1] for prefix in prefix_list]}
         r = requests.post(JUNO_KERNEL_URI, headers=headers, data=payload)
-        prefix_map = {".".join(['io.timbr.kernel', k]): v for k, v in r.json().iteritems()}
+        prefix_map = {v: ".".join(['io.timbr.kernel', k]) for k, v in r.json().iteritems()}
         return prefix_map
