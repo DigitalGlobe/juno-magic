@@ -67,23 +67,24 @@ def build_bridge_class(magics_instance):
         _ipython = get_ipython()
         _msg_id_lut = deque(maxlen=10)
         _machine_callbacks = []
+        _iopub_sub = None
+        _machine_sub = None
+
+        @inlineCallbacks
+        def reset_prefix(self):
+            if self._iopub_sub:
+                yield self._iopub_sub.unsubscribe()
+                self._iopub_sub = None
+            if self._machine_sub:
+                yield self._machine_sub.unsubscribe()
+                self._machine_sub = None
+            returnValue(None)
 
         @inlineCallbacks
         def set_prefix(self, prefix):
-            try:
-                yield self.unsubscribe(u".".join([self._wamp_prefix, u"iopub"]))
-            except Exception as e:
-                log.msg("Unable to unsubscribe")
-                log.msg(str(e))
-
-            try:
-                yield self.unsubscribe(u".".join([self._wamp_prefix, u"machine"]))
-            except Exception as e:
-                log.msg("Unable to unsubscribe")
-                log.msg(str(e))
-
+            yield self.reset_prefix()
             self._wamp_prefix = unicode(prefix)
-            yield self.subscribe(self.on_iopub, u".".join([self._wamp_prefix, u"iopub"]))
+            self._iopub_sub = yield self.subscribe(self.on_iopub, u".".join([self._wamp_prefix, u"iopub"]))
             # try:
             #     yield self.subscribe(self.on_machine, u".".join([self._wamp_prefix, u"machine"]))
             # except:
@@ -295,6 +296,12 @@ class JunoMagics(Magics):
             if prefix == self._kernel_prefix:
                 print("Kernel [{}: {}] already selected".format(prefix, name))
             else:
+                yield self._wamp.reset_prefix()
+                if self._kernel_prefix:
+                    print("Successfully unsubscribed from prefix {}".format(self._kernel_prefix))
+                else:
+                    print("No previous subscriptions")
+
                 self._kernel_prefix = prefix
                 yield self._wamp.set_prefix(prefix)
                 print("Kernel selected [{}: {}]".format(prefix, name))
