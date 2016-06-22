@@ -34,6 +34,7 @@ from autobahn.twisted.wamp import ApplicationSession
 from autobahn import wamp
 from autobahn.wamp.exception import ApplicationError
 from autobahn.websocket.util import parse_url
+from autobahn.twisted.util import sleep as absleep
 
 from juno_magic.runner import JunoRunner
 
@@ -140,6 +141,7 @@ def build_bridge_class(magics_instance):
 
         @inlineCallbacks
         def onJoin(self, details):
+
             log.msg("[onJoin] Registering RPC methods...")
             yield self.register(self)
             log.msg("[onJoin] ...done.")
@@ -148,9 +150,22 @@ def build_bridge_class(magics_instance):
             log.msg("[onJoin] ...done.")
 
 
-
         def onLeave(self, details):
             magics_instance.set_connection(None)
+            magics_instance._connected = Deferred()
+
+        @inlineCallbacks
+        def onDisconnect(self):
+            log.msg("[onDisconnect] ...]")
+            wamp_url = magics_instance._router_url
+            while not magics_instance._wamp:
+                print "attempting to reconnect..."
+                try:
+                    magics_instance.connect(wamp_url)
+                except Exception as e: #Figure this exception out
+                    print e
+                yield absleep(2.0)
+
 
     return WampConnectionComponent
 
