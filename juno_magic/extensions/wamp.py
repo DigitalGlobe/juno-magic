@@ -34,6 +34,7 @@ from autobahn.twisted.wamp import ApplicationSession
 from autobahn import wamp
 from autobahn.wamp.exception import ApplicationError
 from autobahn.websocket.util import parse_url
+from autobahn.twisted.util import sleep as absleep
 
 from juno_magic.runner import JunoRunner
 
@@ -146,11 +147,29 @@ def build_bridge_class(magics_instance):
             log.msg("[onJoin] Checking in with Magics class")
             magics_instance.set_connection(self)
             log.msg("[onJoin] ...done.")
-
-
+            print("Successfully connected to {}".format(magics_instance._router_url))
+            if magics_instance._kernel_prefix:
+                print("Attempting to reconnect to {}".format(magics_instance._kernel_prefix))
+                yield self.set_prefix(magics_instance._kernel_prefix)
+                print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
+            returnValue(None)
 
         def onLeave(self, details):
             magics_instance.set_connection(None)
+            magics_instance._connected = Deferred()
+
+        @inlineCallbacks
+        def onDisconnect(self):
+            log.msg("[onDisconnect] ...]")
+            wamp_url = magics_instance._router_url
+            while not magics_instance._wamp:
+                try:
+                    print "attempting to reconnect..."
+                    magics_instance.connect(wamp_url)
+                except Exception as e:
+                    print e
+                finally:
+                    yield absleep(10.0) # Give time to connect
 
     return WampConnectionComponent
 
@@ -211,6 +230,8 @@ class JunoMagics(Magics):
         execute_parser = subparsers.add_parser("execute", help="Evaluate code on remote kernel")
         execute_parser.add_argument("prefix", help="Prefix for accessing the remote kernel", nargs="?")
         execute_parser.set_defaults(fn=self.execute)
+        status_parser = subparsers.add_parser("status", help="Display information about the status of the client kernel")
+        status_parser.set_defaults(fn=self.status)
         return parser
 
     @line_cell_magic
@@ -227,6 +248,10 @@ class JunoMagics(Magics):
                 return output
         except SystemExit:
             pass
+
+    def status(self):
+        print "here's some status"
+
 
     def token(self, token, **kwargs):
         self._token = token
@@ -260,6 +285,7 @@ class JunoMagics(Magics):
     def stop_bridge(self, **kwargs):
         try:
             self._sp.process.terminate()
+            print "WAMP bridge exposure process terminated successfully"
         except AttributeError as ae:
             pass
         self._sp = None
@@ -294,7 +320,6 @@ class JunoMagics(Magics):
             yield self._wamp.set_prefix(prefix)
             print("Kernel selected [{}]".format(prefix))
 
-        yield self._connected
         prefix_list = yield self.list()
         is_kernel_key = lambda t: re.match(r'io\.timbr\.kernel\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', t)
         if not is_kernel_key(kernel):
@@ -306,6 +331,8 @@ class JunoMagics(Magics):
                 kernel = prefix_map[kernel]
         if kernel in prefix_list and kernel != self._kernel_prefix:
             yield _select(kernel)
+        else:
+            print "Kernel already selected"
 
     @inlineCallbacks
     def subscribe(self, callback, **kwargs):
