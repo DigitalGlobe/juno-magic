@@ -9,11 +9,6 @@ A Jupyter Notebook extension for connection to and executing on remote Jupyter k
 ```bash
 pip install juno-magic
 ```
-or 
-```bash
-conda install juno-magic
-```
----
 
 ## Usage
 
@@ -42,4 +37,6 @@ Access tokens can be obtained by creating an account and generating an access to
 ### Connecting to a remote kernel
 ```
 %juno select <kernel-id>
+# or
+%juno select <kernel-name>
 ```
