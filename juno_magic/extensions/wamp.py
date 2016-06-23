@@ -12,7 +12,6 @@ import sys
 import shlex
 import json
 from time import sleep
-from itertools import ifilter
 
 if sys.version.startswith("3"):
     unicode = str
@@ -155,8 +154,9 @@ def build_bridge_class(magics_instance):
             returnValue(None)
 
         def onLeave(self, details):
+            log.msg("[WampConnectionComponent] onLeave()")
+            log.msg("details: {}".format(str(details)))
             magics_instance.set_connection(None)
-            magics_instance._connected = Deferred()
 
         @inlineCallbacks
         def onDisconnect(self):
@@ -164,10 +164,10 @@ def build_bridge_class(magics_instance):
             wamp_url = magics_instance._router_url
             while not magics_instance._wamp:
                 try:
-                    print "attempting to reconnect..."
+                    print("Attempting to reconnect...")
                     magics_instance.connect(wamp_url)
                 except Exception as e:
-                    print e
+                    print(e)
                 finally:
                     yield absleep(10.0) # Give time to connect
 
@@ -198,7 +198,8 @@ class JunoMagics(Magics):
     def set_connection(self, wamp_connection):
         log.msg("[set_connection] Connection component set.")
         self._wamp = wamp_connection
-        self._connected.callback(True)
+        if wamp_connection:
+            self._connected.callback(True)
 
     def generate_parser(self):
         parser = argparse.ArgumentParser(prog="juno")
@@ -230,8 +231,6 @@ class JunoMagics(Magics):
         execute_parser = subparsers.add_parser("execute", help="Evaluate code on remote kernel")
         execute_parser.add_argument("prefix", help="Prefix for accessing the remote kernel", nargs="?")
         execute_parser.set_defaults(fn=self.execute)
-        status_parser = subparsers.add_parser("status", help="Display information about the status of the client kernel")
-        status_parser.set_defaults(fn=self.status)
         return parser
 
     @line_cell_magic
@@ -248,10 +247,6 @@ class JunoMagics(Magics):
                 return output
         except SystemExit:
             pass
-
-    def status(self):
-        print "here's some status"
-
 
     def token(self, token, **kwargs):
         self._token = token
@@ -285,7 +280,7 @@ class JunoMagics(Magics):
     def stop_bridge(self, **kwargs):
         try:
             self._sp.process.terminate()
-            print "WAMP bridge exposure process terminated successfully"
+            print("WAMP bridge exposure process terminated successfully")
         except AttributeError as ae:
             pass
         self._sp = None
@@ -329,10 +324,13 @@ class JunoMagics(Magics):
                 returnValue(None)
             else:
                 kernel = prefix_map[kernel]
-        if kernel in prefix_list and kernel != self._kernel_prefix:
-            yield _select(kernel)
+        if kernel in prefix_list:
+            if kernel != self._kernel_prefix:
+                yield _select(kernel)
+            else:
+                print("Kernel already selected")
         else:
-            print "Kernel already selected"
+            print("Kernel not available")
 
     @inlineCallbacks
     def subscribe(self, callback, **kwargs):
