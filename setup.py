@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='juno-magic',
-      version='0.1.5',
+      version='0.1.6',
       description='IPython magics and utilities to work with bridged kernels',
       url='https://github.com/timbr-io/juno-magic',
       author='Pramukta Kumar',
