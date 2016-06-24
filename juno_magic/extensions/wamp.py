@@ -297,10 +297,9 @@ class JunoMagics(Magics):
                 pass
         except ApplicationError:
             output = []
-        if kwargs.get("details"):
-            prefix_map = yield threads.deferToThread(self._get_kernel_names, output)
-            publish_to_display(prefix_map)
-        returnValue(output)
+        prefix_map = yield threads.deferToThread(self._get_kernel_names, output, details=kwargs.get("details"))
+        publish_to_display(prefix_map)
+        returnValue(None)
 
     @inlineCallbacks
     def select(self, kernel, **kwargs):
@@ -346,9 +345,12 @@ class JunoMagics(Magics):
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
         output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
 
-    def _get_kernel_names(self, prefix_list):
+    def _get_kernel_names(self, prefix_list, details=False):
         headers = {"Authorization": "Bearer {}".format(self._token)}
         payload = {"addresses": [prefix.split(".")[-1] for prefix in prefix_list]}
         r = requests.post(JUNO_KERNEL_URI, headers=headers, data=payload)
-        prefix_map = {v: ".".join(['io.timbr.kernel', k]) for k, v in r.json().iteritems()}
+        if details: 
+            prefix_map = {str(v): ".".join(['io.timbr.kernel', str(k)]) for k, v in r.json().iteritems()}
+        else:
+            prefix_map = [str(v) for k, v in r.json().iteritems()]
         return prefix_map
