@@ -156,20 +156,12 @@ def build_bridge_class(magics_instance):
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
-            magics_instance.set_connection(None)
 
         @inlineCallbacks
         def onDisconnect(self):
-            log.msg("[onDisconnect] ...]")
-            wamp_url = magics_instance._router_url
-            while not magics_instance._wamp:
-                try:
-                    print("Attempting to reconnect...")
-                    magics_instance.connect(wamp_url)
-                except Exception as e:
-                    print(e)
-                finally:
-                    yield absleep(10.0) # Give time to connect
+            # onDisconnect we should just set the connection to None so that we know to reconnect
+            # next time connect is called
+            magics_instance.set_connection(None)
 
     return WampConnectionComponent
 
@@ -183,10 +175,11 @@ class JunoMagics(Magics):
         self._wamp = None
         self._wamp_runner = None
         self._kernel_prefix = None
+        # NOTE: this strategy only seems to work in kernels launched by the notebook server
         self._connection_file = get_ipython().config["IPKernelApp"]["connection_file"]
         self._token = os.environ.get("JUNO_AUTH_TOKEN")
         self._sp = None
-        self._connected = Deferred()
+        self._connected = None
 
         # set local kernel key
         with open(self._connection_file) as f:
@@ -198,8 +191,8 @@ class JunoMagics(Magics):
     def set_connection(self, wamp_connection):
         log.msg("[set_connection] Connection component set.")
         self._wamp = wamp_connection
-        if wamp_connection:
-            self._connected.callback(True)
+        if wamp_connection is not None:
+            self._connected.callback(wamp_connection)
 
     def generate_parser(self):
         parser = argparse.ArgumentParser(prog="juno")
@@ -252,19 +245,26 @@ class JunoMagics(Magics):
         self._token = token
 
     def connect(self, wamp_url, reconnect=False, **kwargs):
-        try:
-            if (wamp_url != self._router_url) or reconnect:
+        # NOTE: we would like connect to return immediately if there is an active connection, disconnect and
+        # connect if the connection url has changed, or reconnect if the connection has dropped
+        if (wamp_url != self._router_url) or reconnect:
+            # NOTE: this means that connect was called with either a new url or we are forcibly reconnecting
+            try:
                 self._wamp_runner.cancel()
-        except (CancelledError, AttributeError):
-            pass
-        finally:
+                self.set_connection(None)
+            except (CancelledError, AttributeError):
+                # NOTE: this means self._wamp_runner was already set to None, or already cancelled.
+                pass
+        if self._connected is None:
+            # NOTE: this means we have dropped the connection (ie onDisconnect has been called), so we'll make
+            # a new one.
+            self._connected = Deferred() # allocate a new deferred
             self._router_url = wamp_url
-            log.msg("Connecting to router: {}".format(self._router_url))
-            log.msg("  Project Realm: {}".format(self._realm))
-
-            self._connected = Deferred()
             _wamp_application_runner = JunoRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
             self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
+            log.msg("Connecting to router: {}".format(self._router_url))
+            log.msg("  Project Realm: {}".format(self._realm))
+        return self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
     def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
         self.stop_bridge()
@@ -287,8 +287,8 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def list(self, **kwargs):
+        yield self.connect(self._router_url)
         try:
-            yield self._connected
             output = yield self._wamp.call(u"io.timbr.kernel.list")
             try:
                 output.remove(self._kernel_key)
@@ -304,6 +304,7 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def select(self, kernel, **kwargs):
+        yield self.connect(self._router_url)
         @inlineCallbacks
         def _select(prefix):
             yield self._wamp.reset_prefix()
@@ -335,12 +336,12 @@ class JunoMagics(Magics):
     @inlineCallbacks
     def subscribe(self, callback, **kwargs):
         # NOTE: callback is a string
-        yield self._connected
+        yield self.connect(self._router_url)
         yield self._wamp.add_machine_callback(callback)
 
     @inlineCallbacks
     def execute(self, cell, prefix=None, **kwargs):
-        yield self._connected
+        yield self.connect(self._router_url)
         if prefix is not None:
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
         output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
