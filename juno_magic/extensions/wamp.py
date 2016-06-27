@@ -286,7 +286,7 @@ class JunoMagics(Magics):
         self._sp = None
 
     @inlineCallbacks
-    def list(self, **kwargs):
+    def list(self, raw=False, **kwargs):
         yield self.connect(self._router_url)
         try:
             output = yield self._wamp.call(u"io.timbr.kernel.list")
@@ -297,9 +297,11 @@ class JunoMagics(Magics):
                 pass
         except ApplicationError:
             output = []
-        prefix_map = yield threads.deferToThread(self._get_kernel_names, output, details=kwargs.get("details"))
-        publish_to_display(prefix_map)
-        returnValue(None)
+        if raw is not True:
+            prefix_map = yield threads.deferToThread(self._get_kernel_names, output, details=kwargs.get('details'))
+            returnValue(prefix_map)
+        else:
+            returnValue(output)
 
     @inlineCallbacks
     def select(self, kernel, **kwargs):
@@ -315,10 +317,10 @@ class JunoMagics(Magics):
             yield self._wamp.set_prefix(prefix)
             print("Kernel selected [{}]".format(prefix))
 
-        prefix_list = yield self.list()
+        prefix_list = yield self.list(raw=True)
         is_kernel_key = lambda t: re.match(r'io\.timbr\.kernel\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', t)
         if not is_kernel_key(kernel):
-            prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list)
+            prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list, details=True)
             if kernel not in prefix_map:
                 print("Kernel not in prefix map")
                 returnValue(None)
