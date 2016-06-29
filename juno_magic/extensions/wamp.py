@@ -207,6 +207,7 @@ class JunoMagics(Magics):
         connect_parser.set_defaults(fn=self.connect)
         list_parser = subparsers.add_parser("list", help="List registered kernel prefixes")
         list_parser.add_argument("--details", help="Display detailed information about existing kernels", action="store_true")
+        list_parser.add_argument("--raw", help="Display raw kernel and prefix information about existing kernels", action="store_true")
         list_parser.set_defaults(fn=self.list)
         select_parser = subparsers.add_parser("select", help="Select a remote kernel to make active")
         select_parser.add_argument("kernel", help="Kernel name or prefix id for accessing the remote kernel", nargs="?")
@@ -286,7 +287,7 @@ class JunoMagics(Magics):
         self._sp = None
 
     @inlineCallbacks
-    def list(self, **kwargs):
+    def list(self, raw=False, **kwargs):
         yield self.connect(self._router_url)
         try:
             output = yield self._wamp.call(u"io.timbr.kernel.list")
@@ -297,10 +298,11 @@ class JunoMagics(Magics):
                 pass
         except ApplicationError:
             output = []
-        if kwargs.get("details"):
-            prefix_map = yield threads.deferToThread(self._get_kernel_names, output)
-            publish_to_display(prefix_map)
-        returnValue(output)
+        if raw is not True:
+            prefix_map = yield threads.deferToThread(self._get_kernel_names, output, details=kwargs.get('details'))
+            returnValue(prefix_map)
+        else:
+            returnValue(output)
 
     @inlineCallbacks
     def select(self, kernel, **kwargs):
@@ -316,10 +318,10 @@ class JunoMagics(Magics):
             yield self._wamp.set_prefix(prefix)
             print("Kernel selected [{}]".format(prefix))
 
-        prefix_list = yield self.list()
+        prefix_list = yield self.list(raw=True)
         is_kernel_key = lambda t: re.match(r'io\.timbr\.kernel\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', t)
         if not is_kernel_key(kernel):
-            prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list)
+            prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list, details=True)
             if kernel not in prefix_map:
                 print("Kernel not in prefix map")
                 returnValue(None)
@@ -346,9 +348,12 @@ class JunoMagics(Magics):
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
         output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
 
-    def _get_kernel_names(self, prefix_list):
+    def _get_kernel_names(self, prefix_list, details=False):
         headers = {"Authorization": "Bearer {}".format(self._token)}
         payload = {"addresses": [prefix.split(".")[-1] for prefix in prefix_list]}
         r = requests.post(JUNO_KERNEL_URI, headers=headers, data=payload)
-        prefix_map = {v: ".".join(['io.timbr.kernel', k]) for k, v in r.json().iteritems()}
+        if details: 
+            prefix_map = {str(v): ".".join(['io.timbr.kernel', str(k)]) for k, v in r.json().iteritems()}
+        else:
+            prefix_map = [str(v) for k, v in r.json().iteritems()]
         return prefix_map
