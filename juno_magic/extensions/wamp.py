@@ -207,6 +207,7 @@ class JunoMagics(Magics):
         connect_parser.set_defaults(fn=self.connect)
         list_parser = subparsers.add_parser("list", help="List registered kernel prefixes")
         list_parser.add_argument("--details", help="Display detailed information about existing kernels", action="store_true")
+        list_parser.add_argument("--raw", help="Display raw kernel and prefix information about existing kernels", action="store_true")
         list_parser.set_defaults(fn=self.list)
         select_parser = subparsers.add_parser("select", help="Select a remote kernel to make active")
         select_parser.add_argument("kernel", help="Kernel name or prefix id for accessing the remote kernel", nargs="?")
