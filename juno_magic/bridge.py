@@ -192,6 +192,7 @@ def build_bridge_class(client):
             except AttributeError:
                 pass
             yield self.discovery_task.stop()
+            super(self.__class__, self).onLeave(details)
 
         def onDisconnect(self):
             log.msg("[onDisconnect] ...")
