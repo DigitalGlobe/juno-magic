@@ -257,7 +257,7 @@ class JunoMagics(Magics):
             except (CancelledError, AttributeError):
                 # NOTE: this means self._wamp_runner was already set to None, or already cancelled.
                 pass
-        if self._connected is None:
+        if self._wamp is None:
             # NOTE: this means we have dropped the connection (ie onDisconnect has been called), so we'll make
             # a new one.
             self._connected = Deferred() # allocate a new deferred
