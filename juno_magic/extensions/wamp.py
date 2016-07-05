@@ -156,6 +156,7 @@ def build_bridge_class(magics_instance):
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
+            super(self.__class__, self).onLeave(details)
 
         @inlineCallbacks
         def onDisconnect(self):
@@ -256,7 +257,7 @@ class JunoMagics(Magics):
             except (CancelledError, AttributeError):
                 # NOTE: this means self._wamp_runner was already set to None, or already cancelled.
                 pass
-        if self._connected is None:
+        if self._wamp is None:
             # NOTE: this means we have dropped the connection (ie onDisconnect has been called), so we'll make
             # a new one.
             self._connected = Deferred() # allocate a new deferred
@@ -352,7 +353,7 @@ class JunoMagics(Magics):
         headers = {"Authorization": "Bearer {}".format(self._token)}
         payload = {"addresses": [prefix.split(".")[-1] for prefix in prefix_list]}
         r = requests.post(JUNO_KERNEL_URI, headers=headers, data=payload)
-        if details: 
+        if details:
             prefix_map = {str(v): ".".join(['io.timbr.kernel', str(k)]) for k, v in r.json().iteritems()}
         else:
             prefix_map = [str(v) for k, v in r.json().iteritems()]
