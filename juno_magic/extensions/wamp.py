@@ -106,7 +106,7 @@ def build_bridge_class(magics_instance):
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
             elif msg["msg_type"] == "status":
                 display(Javascript('setJunoStatus("{}")'.format(msg["content"]["execution_state"])))
-            elif msg["msg_type"] in ["execute_input", "execution_state", "status"]:
+            elif msg["msg_type"] in ["execute_input", "execution_state"]:
                 pass
             else:
                 pprint(msg)
