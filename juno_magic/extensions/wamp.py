@@ -1,7 +1,7 @@
 from IPython.core.magic import (Magics, magics_class, line_magic,
                                 cell_magic, line_cell_magic)
 from IPython import get_ipython
-from IPython.display import publish_display_data, display
+from IPython.display import publish_display_data, display, Javascript
 from IPython.core.formatters import DisplayFormatter
 
 from pprint import pprint
@@ -104,7 +104,9 @@ def build_bridge_class(magics_instance):
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
             elif msg["msg_type"] == "execute_result":
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
-            elif msg["msg_type"] in ["execute_input", "execution_state", "status"]:
+            elif msg["msg_type"] == "status":
+                display(Javascript('$("#juno_status").trigger("update", ["{}"])'.format(msg["content"]["execution_state"])))
+            elif msg["msg_type"] in ["execute_input", "execution_state"]:
                 pass
             else:
                 pprint(msg)

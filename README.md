@@ -8,6 +8,8 @@ A Jupyter Notebook extension for connection to and executing on remote Jupyter k
 ## Installation 
 ```bash
 pip install juno-magic
+# To install the javascript nbextension
+jupyter nbextension enable --py juno_magic 
 ```
 
 ## Usage
@@ -26,7 +28,7 @@ Access tokens can be obtained by creating an account and generating an access to
 
 ### Connecting to the WAMP router
 ```
-%juno connect
+%juno connect [wamp router websocket - defaults to wss://juno.timbr.io/wamp/route]
 ```
 
 ### Viewing online remote kernels
