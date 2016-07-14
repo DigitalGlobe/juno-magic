@@ -88,4 +88,4 @@ ENV/
 # Rope project settings
 .ropeproject
 
-./js/node_modules
+js/node_modules

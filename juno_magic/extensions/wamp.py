@@ -44,6 +44,7 @@ from sh import wampify
 import requests
 import re
 
+from ..components.component import *
 
 JUNO_KERNEL_URI = "https://juno.timbr.io/api/kernels/list"
 
@@ -70,6 +71,7 @@ def build_bridge_class(magics_instance):
         _machine_callbacks = []
         _iopub_sub = None
         _machine_sub = None
+
 
         @inlineCallbacks
         def reset_prefix(self):
@@ -105,7 +107,7 @@ def build_bridge_class(magics_instance):
             elif msg["msg_type"] == "execute_result":
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
             elif msg["msg_type"] == "status":
-                display(Javascript('$("#juno_status").trigger("update", ["{}"])'.format(msg["content"]["execution_state"])))
+                magics_instance._status_comp.send({ 'method': 'update', 'status': msg["content"]["execution_state"]})
             elif msg["msg_type"] in ["execute_input", "execution_state"]:
                 pass
             else:
@@ -183,6 +185,7 @@ class JunoMagics(Magics):
         self._token = os.environ.get("JUNO_AUTH_TOKEN")
         self._sp = None
         self._connected = None
+        self._status_comp = Component(target="juno.status", module='Status', props={}, render=True) 
 
         # set local kernel key
         with open(self._connection_file) as f:
@@ -290,7 +293,7 @@ class JunoMagics(Magics):
         self._sp = None
 
     @inlineCallbacks
-    def list(self, raw=False, **kwargs):
+    def list(self, raw=False, html=True, **kwargs):
         yield self.connect(self._router_url)
         try:
             output = yield self._wamp.call(u"io.timbr.kernel.list")
@@ -303,7 +306,10 @@ class JunoMagics(Magics):
             output = []
         if raw is not True:
             prefix_map = yield threads.deferToThread(self._get_kernel_names, output, details=kwargs.get('details'))
-            returnValue(prefix_map)
+            if not html:
+                returnValue(prefix_map)
+            else:
+                display(Component(module='List', props={'items': prefix_map}))
         else:
             returnValue(output)
 
@@ -321,7 +327,7 @@ class JunoMagics(Magics):
             yield self._wamp.set_prefix(prefix)
             print("Kernel selected [{}]".format(prefix))
 
-        prefix_list = yield self.list(raw=True)
+        prefix_list = yield self.list(raw=True, html=False)
         is_kernel_key = lambda t: re.match(r'io\.timbr\.kernel\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', t)
         if not is_kernel_key(kernel):
             prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list, details=True)
