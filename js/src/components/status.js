@@ -1,20 +1,26 @@
 import React from 'react';
 import classNames from 'classnames';
+import dispatcher from './dispatcher.js';
 
 class Status extends React.Component {
 
-  constructor( props ){
+  constructor( props ) {
     super( props );
     this.state = { 
       status: 'idle' 
     };
   }
 
+  componentWillMount(){
+    dispatcher.register( payload => {
+      if ( payload.actionType === 'status_update' ) {
+        this.setState({ status: payload.data.status })
+      }
+    } );
+  }
+
   render() {
-
-    const { status } = this.props;
-    console.log('RENDER STATUS', this.props)
-
+    const { status } = this.state;
     const classes = classNames(
       'kernel_idle_icon', {
         'kernel_busy_icon': status === 'busy'

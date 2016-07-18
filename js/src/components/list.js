@@ -1,13 +1,21 @@
 import React from 'react';
 
+function selectKernel( props, kernel ){
+  console.log('SELECT', kernel);
+  props.comm.send({ method: 'select', data: { kernel } });
+}
+
+function buildList( props ) {
+  return props.items.map( ( item, i ) => {
+    return <li key={i}> { item } <button id={item} onClick={ () => selectKernel( props, item ) }> Select</button> </li>;
+  })
+}
+
 const List = function( props ) {
   return ( 
     <div>
       <ul>
-      { props.items.map( item => {
-          return <li> { item } </li>;
-        })
-      }
+      { buildList( props ) }
       </ul>
     </div>
   );

@@ -6,7 +6,8 @@ module.exports = function( target, kernel ) {
 
     kernel.comm_manager.register_target( target, function( comm, msg ) {
       if ( msg['msg_type'] === 'comm_open' ) {
-        this.components[ comm.comm_id ] = new Component( comm, msg['content']['data'] );
+        //console.log('open comm', msg)
+        this.components[ comm.comm_id ] = new Component( comm, msg );
       }
     });
 

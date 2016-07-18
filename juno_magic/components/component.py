@@ -1,18 +1,23 @@
 from ipykernel.comm import Comm
-from IPython.display import display
+from IPython.display import display, Javascript
+from traitlets import HasTraits
 
-class Component():
+#import sys
+#reload(sys)
+#sys.setdefaultencoding("utf-8")
 
-  def __init__(self, target='juno', render=False, **kwargs):
-      self.target = target 
-      self.module = kwargs.pop('module', None)
-      self.open(kwargs.pop('props', {}))
-      if render:
-          self.send({"method": "display"})
+class Component(HasTraits):
+
+  def __init__(self, target_name='juno', props={}):
+      self.target_name = target_name
+      self.props = {}
+
+  def __del__(self):
+      self.close()
 
   def open(self, props):
       props['module'] = self.module
-      args = dict(target_name=self.target, data=props)
+      args = dict(target_name=self.target_name, data=props)
       self.comm = Comm(**args)
 
   def close(self):
@@ -28,8 +33,4 @@ class Component():
       self.send({"method": "display"})
       data = { 'application/vnd.jupyter.widget': self.module }
       display(data, raw=True)
-
-  def handle_comm_opened(self, comm, msg):
-      module_name = str(msg['content']['data']['module'])
-      print module_name
 

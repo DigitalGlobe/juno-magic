@@ -1,24 +1,30 @@
 // Generic Component that handles comm messages and renders components to notebook cells
 
-module.exports = function Component( comm, props, domId ) {
+module.exports = function Component( comm, props ) {
+  var module = props.content.data.module;
+  var domId = props.content.data.domId;
 
+  // Handle all messages over this comm
   var handle_msg = function( msg ) {
-    var data = msg.content.data;    
+    var data = msg.content.data;
 
-    if ( props.module && Juno.components[ props.module ] ) {
+    if ( module && Juno.components[ module ] ) {
       switch ( data.method ) {
         case "update":
-          var element = _createMarkup( props.module, data );
-          _render( element, msg );
+          Juno.components.dispatcher.dispatch({
+            actionType: module.toLowerCase() + '_update',
+            data: data.props 
+          });
           break;
         case "display":
-          var element = _createMarkup( props.module, props );
+          var element = _createMarkup( module, props.content.data );
           _render( element, msg );
           break;
       }
     }
   };
 
+  // Render the component to either the output cell or given domId
   var _render = function( element, msg ){ 
     var display;
     if ( domId ) {
@@ -30,7 +36,9 @@ module.exports = function Component( comm, props, domId ) {
   };
 
 
+  // Create React Elements from components and props 
   var _createMarkup = function( mod, newProps ){
+    newProps.comm = comm;
     return React.createElement( Juno.components[ mod ], newProps );
   };
 
@@ -41,9 +49,14 @@ module.exports = function Component( comm, props, domId ) {
     var msg_id = msg.parent_header.msg_id;
     var parentEl = Jupyter.notebook.get_msg_cell( msg_id ).output_area.element[0];
     var output_area = parentEl.children[0];
-    return output_area.children[1];
+    var newDiv = document.createElement("div");
+    output_area.children[1].appendChild(newDiv); 
+
+    //return output_area.children[1];
+    return newDiv;
   }
 
+  // register message callback
   comm.on_msg( handle_msg );
   return this;
 };

@@ -44,7 +44,7 @@ from sh import wampify
 import requests
 import re
 
-from ..components.component import *
+from juno_magic.components import List, Status
 
 JUNO_KERNEL_URI = "https://juno.timbr.io/api/kernels/list"
 
@@ -107,7 +107,8 @@ def build_bridge_class(magics_instance):
             elif msg["msg_type"] == "execute_result":
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
             elif msg["msg_type"] == "status":
-                magics_instance._status_comp.send({ 'method': 'update', 'status': msg["content"]["execution_state"]})
+                #magics_instance._status_comp.send({ 'method': 'update', 'status': msg["content"]["execution_state"]})
+                magics_instance._status_comp.current_status = msg["content"]["execution_state"]
             elif msg["msg_type"] in ["execute_input", "execution_state"]:
                 pass
             else:
@@ -185,7 +186,7 @@ class JunoMagics(Magics):
         self._token = os.environ.get("JUNO_AUTH_TOKEN")
         self._sp = None
         self._connected = None
-        self._status_comp = Component(target="juno.status", module='Status', props={}, render=True) 
+        self._status_comp = Status()
 
         # set local kernel key
         with open(self._connection_file) as f:
@@ -309,7 +310,7 @@ class JunoMagics(Magics):
             if not html:
                 returnValue(prefix_map)
             else:
-                display(Component(module='List', props={'items': prefix_map}))
+                display(List( prefix_map ))
         else:
             returnValue(output)
 
