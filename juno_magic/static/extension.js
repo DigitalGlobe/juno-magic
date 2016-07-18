@@ -64,11 +64,6 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 	    if ( kernel.comm_manager ) {
 	      manager = mngr( 'juno', kernel );
 	      kernel.component_manager = manager;
-
-	      /*kernel.comm_manager.register_target( 'juno.status', function( comm, msg ) {
-	        console.log( comm, msg['content']['data'] )
-	        Juno.statusComp = new Component( comm, msg['content']['data'], 'juno_status' );
-	      });*/
 	    }
 	};
 
@@ -150,7 +145,7 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 /* 2 */
 /***/ function(module, exports) {
 
-	// Generic Component that handles comm messages and renders components to notebook cells
+	// Generic Component that handles comm messages and renders components to notebook cell
 
 	module.exports = function Component( comm, props ) {
 	  var module = props.content.data.module;

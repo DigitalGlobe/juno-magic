@@ -1,4 +1,4 @@
-// Generic Component that handles comm messages and renders components to notebook cells
+// Generic Component that handles comm messages and renders components to notebook cell
 
 module.exports = function Component( comm, props ) {
   var module = props.content.data.module;
