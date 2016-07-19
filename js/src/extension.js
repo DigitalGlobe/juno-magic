@@ -4,20 +4,17 @@ if (window.require) {
         map: {
             "*" : {
                 "react": "https://fb.me/react-15.2.1.min.js",
-                "react-dom": "https://fb.me/react-dom-15.2.1.min.js",
-                "components": "/nbextensions/juno_magic/components.js"
+                "react-dom": "https://fb.me/react-dom-15.2.1.min.js"
             }
         }
     });
 }
 
-var mngr = require("./manager");
-var Component = require("./component");
+import Manager from "./manager";
 
 var handle_kernel = function(Jupyter, kernel) {
-    if ( kernel.comm_manager ) {
-      manager = mngr( 'juno', kernel );
-      kernel.component_manager = manager;
+    if ( kernel.comm_manager && !kernel.component_manager ) {
+      kernel.component_manager = new Manager( 'juno', kernel );
     }
 };
 
@@ -51,13 +48,11 @@ function load_ipython_extension () {
             "base/js/namespace",
             "base/js/events",
             'react', 
-            'react-dom', 
-            'components'
-        ], function( Jupyter, events, React, ReactDom, components ) {
+            'react-dom'
+        ], function( Jupyter, events, React, ReactDom ) {
 
             window.React = React;
             window.ReactDom = ReactDom;
-            window.Juno = { components };
 
             add_css('./nbextensions/juno_magic/juno.css');
             $('#kernel_indicator').append('<span id="juno_status"></span>');

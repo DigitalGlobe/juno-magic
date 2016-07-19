@@ -1,6 +1,8 @@
 // Generic Component that handles comm messages and renders components to notebook cell
+import dispatcher from './components/dispatcher';
+import components from './components';
 
-module.exports = function Component( comm, props ) {
+export default function Component( comm, props ) {
   var module = props.content.data.module;
   var domId = props.content.data.domId;
 
@@ -8,10 +10,10 @@ module.exports = function Component( comm, props ) {
   var handle_msg = function( msg ) {
     var data = msg.content.data;
 
-    if ( module && Juno.components[ module ] ) {
+    if ( module && components[ module ] ) {
       switch ( data.method ) {
         case "update":
-          Juno.components.dispatcher.dispatch({
+          dispatcher.dispatch({
             actionType: module.toLowerCase() + '_update',
             data: data.props 
           });
@@ -39,7 +41,7 @@ module.exports = function Component( comm, props ) {
   // Create React Elements from components and props 
   var _createMarkup = function( mod, newProps ){
     newProps.comm = comm;
-    return React.createElement( Juno.components[ mod ], newProps );
+    return React.createElement( components[ mod ], newProps );
   };
 
 
