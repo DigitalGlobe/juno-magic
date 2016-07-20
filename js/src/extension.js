@@ -4,20 +4,25 @@ if (window.require) {
         map: {
             "*" : {
                 "react": "https://fb.me/react-15.2.1.min.js",
-                "react-dom": "https://fb.me/react-dom-15.2.1.min.js",
-                "components": "/nbextensions/juno_magic/static/components.js"
+                "react-dom": "https://fb.me/react-dom-15.2.1.min.js"
             }
         }
     });
 }
 
-var mngr = require("./manager");
-var Component = require("./component");
+import Manager from "./manager";
+import WidgetArea from "./widget_area";
 
 var handle_kernel = function(Jupyter, kernel) {
-    if ( kernel.comm_manager ) {
-      manager = mngr( 'juno', kernel );
-      kernel.component_manager = manager;
+    if ( kernel.comm_manager && !kernel.component_manager ) {
+      kernel.component_manager = new Manager( 'juno', kernel );
+    }
+};
+
+var handle_cell = function(cell) {
+    if (cell.cell_type==='code') {
+        var area = new WidgetArea(cell);
+        cell.reactwidgetarea = area;
     }
 };
 
@@ -30,6 +35,25 @@ function register_events(Jupyter, events) {
     // When the kernel is created, create a widget manager.
     events.on('kernel_created.Kernel kernel_created.Session', function(event, data) {
         handle_kernel(Jupyter, data.kernel);
+    });
+
+    // Create widget areas for cells that already exist.
+    var cells = Jupyter.notebook.get_cells();
+    for (var i = 0; i < cells.length; i++) {
+        handle_cell(cells[i]);
+    }
+
+    // Listen to cell creation and deletion events.  When a
+    // cell is created, create a widget area for that cell.
+    events.on('create.Cell', function(event, data) {
+        handle_cell(data.cell);
+    });
+    // When a cell is deleted, delete the widget area if it
+    // exists.
+    events.on('delete.Cell', function(event, data) {
+        if (data.cell && data.cell.widgetarea) {
+            data.cell.widgetarea.dispose();
+        }
     });
 }
 
@@ -51,15 +75,13 @@ function load_ipython_extension () {
             "base/js/namespace",
             "base/js/events",
             'react', 
-            'react-dom', 
-            'components'
-        ], function( Jupyter, events, React, ReactDom, components ) {
+            'react-dom'
+        ], function( Jupyter, events, React, ReactDom ) {
 
             window.React = React;
             window.ReactDom = ReactDom;
-            window.Juno = { components };
 
-            add_css('./nbextensions/juno_magic/static/juno.css');
+            add_css('./nbextensions/juno_magic/juno.css');
             $('#kernel_indicator').append('<span id="juno_status"></span>');
 
             register_events(Jupyter, events);
