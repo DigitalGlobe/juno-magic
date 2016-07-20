@@ -5,7 +5,7 @@ if (window.require) {
             "*" : {
                 "react": "https://fb.me/react-15.2.1.min.js",
                 "react-dom": "https://fb.me/react-dom-15.2.1.min.js",
-                "components": "/nbextensions/juno_magic/components.js"
+                "components": "/nbextensions/juno_magic/static/components.js"
             }
         }
     });
@@ -59,7 +59,7 @@ function load_ipython_extension () {
             window.ReactDom = ReactDom;
             window.Juno = { components };
 
-            add_css('./nbextensions/juno_magic/juno.css');
+            add_css('./nbextensions/juno_magic/static/juno.css');
             $('#kernel_indicator').append('<span id="juno_status"></span>');
 
             register_events(Jupyter, events);

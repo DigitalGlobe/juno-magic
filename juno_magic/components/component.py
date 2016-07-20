@@ -5,6 +5,8 @@ from traitlets import HasTraits
 #import sys
 #reload(sys)
 #sys.setdefaultencoding("utf-8")
+import logging
+logger = logging.getLogger("tornado.general")
 
 class Component(HasTraits):
 
@@ -12,15 +14,18 @@ class Component(HasTraits):
       self.target_name = target_name
       self.props = {}
 
-  def __del__(self):
-      self.close()
+#  def __del__(self):
+#      self.close()
 
   def open(self, props):
       props['module'] = self.module
       args = dict(target_name=self.target_name, data=props)
       self.comm = Comm(**args)
+      logger.error("Comm opened: {}".format(self.comm.comm_id))
+
 
   def close(self):
+      logger.error("Comm closed")
       if self.comm is not None:
           self.comm.close()
           self.comm = None
@@ -33,4 +38,3 @@ class Component(HasTraits):
       self.send({"method": "display"})
       data = { 'application/vnd.jupyter.widget': self.module }
       display(data, raw=True)
-
