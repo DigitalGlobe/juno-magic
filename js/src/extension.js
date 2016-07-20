@@ -11,10 +11,18 @@ if (window.require) {
 }
 
 import Manager from "./manager";
+import WidgetArea from "./widget_area";
 
 var handle_kernel = function(Jupyter, kernel) {
     if ( kernel.comm_manager && !kernel.component_manager ) {
       kernel.component_manager = new Manager( 'juno', kernel );
+    }
+};
+
+var handle_cell = function(cell) {
+    if (cell.cell_type==='code') {
+        var area = new WidgetArea(cell);
+        cell.reactwidgetarea = area;
     }
 };
 
@@ -27,6 +35,25 @@ function register_events(Jupyter, events) {
     // When the kernel is created, create a widget manager.
     events.on('kernel_created.Kernel kernel_created.Session', function(event, data) {
         handle_kernel(Jupyter, data.kernel);
+    });
+
+    // Create widget areas for cells that already exist.
+    var cells = Jupyter.notebook.get_cells();
+    for (var i = 0; i < cells.length; i++) {
+        handle_cell(cells[i]);
+    }
+
+    // Listen to cell creation and deletion events.  When a
+    // cell is created, create a widget area for that cell.
+    events.on('create.Cell', function(event, data) {
+        handle_cell(data.cell);
+    });
+    // When a cell is deleted, delete the widget area if it
+    // exists.
+    events.on('delete.Cell', function(event, data) {
+        if (data.cell && data.cell.widgetarea) {
+            data.cell.widgetarea.dispose();
+        }
     });
 }
 

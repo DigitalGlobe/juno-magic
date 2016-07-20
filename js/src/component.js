@@ -49,13 +49,18 @@ export default function Component( comm, props ) {
   // improve lookup of msg cell's "output_area.output_subarea" 
   var _outputAreaElement = function( msg ) {
     var msg_id = msg.parent_header.msg_id;
-    var parentEl = Jupyter.notebook.get_msg_cell( msg_id ).output_area.element[0];
-    var output_area = parentEl.children[0];
-    var newDiv = document.createElement("div");
-    output_area.children[1].appendChild(newDiv); 
+    var cell = Jupyter.notebook.get_msg_cell( msg_id );
+    return cell.reactwidgetarea.widget_subarea;
+
+    //var output_area = Jupyter.notebook.get_msg_cell( msg_id ).output_area.element[0];
+    //var output_area = parentEl.children[0];
+    //var newDiv = document.createElement("div");
+    //console.log('oputput', output_area, msg_id, Jupyter.notebook.get_msg_cell( msg_id ).output_area.element)
+    //output_area.children[1].appendChild(newDiv); 
+    //output_area.appendChild(newDiv); 
 
     //return output_area.children[1];
-    return newDiv;
+    //return newDiv;
   }
 
   // register message callback

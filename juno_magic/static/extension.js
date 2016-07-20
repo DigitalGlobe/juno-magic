@@ -50,6 +50,10 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 
 	var _manager2 = _interopRequireDefault(_manager);
 
+	var _widget_area = __webpack_require__(43);
+
+	var _widget_area2 = _interopRequireDefault(_widget_area);
+
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 	// Configure requirejs
@@ -70,6 +74,13 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 	    }
 	};
 
+	var handle_cell = function handle_cell(cell) {
+	    if (cell.cell_type === 'code') {
+	        var area = new _widget_area2.default(cell);
+	        cell.reactwidgetarea = area;
+	    }
+	};
+
 	function register_events(Jupyter, events) {
 	    // If a kernel already exists, create a widget manager.
 	    if (Jupyter.notebook && Jupyter.notebook.kernel) {
@@ -78,6 +89,25 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 	    // When the kernel is created, create a widget manager.
 	    events.on('kernel_created.Kernel kernel_created.Session', function (event, data) {
 	        handle_kernel(Jupyter, data.kernel);
+	    });
+
+	    // Create widget areas for cells that already exist.
+	    var cells = Jupyter.notebook.get_cells();
+	    for (var i = 0; i < cells.length; i++) {
+	        handle_cell(cells[i]);
+	    }
+
+	    // Listen to cell creation and deletion events.  When a
+	    // cell is created, create a widget area for that cell.
+	    events.on('create.Cell', function (event, data) {
+	        handle_cell(data.cell);
+	    });
+	    // When a cell is deleted, delete the widget area if it
+	    // exists.
+	    events.on('delete.Cell', function (event, data) {
+	        if (data.cell && data.cell.widgetarea) {
+	            data.cell.widgetarea.dispose();
+	        }
 	    });
 	}
 
@@ -207,13 +237,18 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 	  // improve lookup of msg cell's "output_area.output_subarea" 
 	  var _outputAreaElement = function _outputAreaElement(msg) {
 	    var msg_id = msg.parent_header.msg_id;
-	    var parentEl = Jupyter.notebook.get_msg_cell(msg_id).output_area.element[0];
-	    var output_area = parentEl.children[0];
-	    var newDiv = document.createElement("div");
-	    output_area.children[1].appendChild(newDiv);
+	    var cell = Jupyter.notebook.get_msg_cell(msg_id);
+	    return cell.reactwidgetarea.widget_subarea;
+
+	    //var output_area = Jupyter.notebook.get_msg_cell( msg_id ).output_area.element[0];
+	    //var output_area = parentEl.children[0];
+	    //var newDiv = document.createElement("div");
+	    //console.log('oputput', output_area, msg_id, Jupyter.notebook.get_msg_cell( msg_id ).output_area.element)
+	    //output_area.children[1].appendChild(newDiv); 
+	    //output_area.appendChild(newDiv); 
 
 	    //return output_area.children[1];
-	    return newDiv;
+	    //return newDiv;
 	  };
 
 	  // register message callback
@@ -713,7 +748,8 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 	function selectKernel(props, kernel) {
-	  console.log('SELECT', kernel);
+	  //console.log('SENDING', { method: 'select', data: { kernel } });
+	  //console.log(props.comm)
 	  props.comm.send({ method: 'select', data: { kernel: kernel } });
 	}
 
@@ -4683,6 +4719,43 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 		}
 	}());
 
+
+/***/ },
+/* 43 */
+/***/ function(module, exports) {
+
+	'use strict';
+
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+
+	exports.default = function (cell) {
+
+	    var widget_area = document.createElement('div');
+	    widget_area.classList.add('widget-area');
+	    //widget_area.style.display = 'none';
+
+	    this.widget_area = widget_area;
+
+	    var widget_prompt = document.createElement('div');
+	    widget_prompt.classList.add('prompt');
+	    widget_area.appendChild(widget_prompt);
+
+	    var widget_subarea = document.createElement('div');
+	    widget_subarea.classList.add('widget-subarea');
+	    widget_area.appendChild(widget_subarea);
+
+	    this.widget_subarea = widget_subarea;
+
+	    if (cell.input) {
+	        cell.input.after(widget_area);
+	    } else {
+	        throw new Error('Cell does not have an `input` element.  Is it not a CodeCell?');
+	    }
+	};
+
+	module.exports = exports['default'];
 
 /***/ }
 /******/ ])});;

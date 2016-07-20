@@ -310,7 +310,12 @@ class JunoMagics(Magics):
             if not html:
                 returnValue(prefix_map)
             else:
-                display(List( prefix_map ))
+                def hello(*args, **kwargs):
+                    display(Javascript('alert("wtf")'))
+
+                list_comp = List( prefix_map )
+                list_comp.on_select(hello)
+                display(list_comp)
         else:
             returnValue(output)
 
