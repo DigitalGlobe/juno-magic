@@ -68,6 +68,9 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 	    });
 	}
 
+	//import JupyterReact from 'JupyterReact';
+
+
 	var handle_kernel = function handle_kernel(Jupyter, kernel) {
 	    if (kernel.comm_manager && !kernel.component_manager) {
 	        kernel.component_manager = new _manager2.default('juno', kernel);
@@ -76,8 +79,8 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 
 	var handle_cell = function handle_cell(cell) {
 	    if (cell.cell_type === 'code') {
-	        var area = new _widget_area2.default(cell);
-	        cell.reactwidgetarea = area;
+	        var domEl = new _widget_area2.default(cell);
+	        cell.react_dom = domEl;
 	    }
 	};
 
@@ -179,6 +182,10 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 	Object.defineProperty(exports, "__esModule", {
 	  value: true
 	});
+
+	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; }; // Generic Component that handles comm messages and renders components to notebook cell
+
+
 	exports.default = Component;
 
 	var _dispatcher = __webpack_require__(3);
@@ -191,7 +198,6 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-	// Generic Component that handles comm messages and renders components to notebook cell
 	function Component(comm, props) {
 	  var module = props.content.data.module;
 	  var domId = props.content.data.domId;
@@ -209,7 +215,9 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 	          });
 	          break;
 	        case "display":
-	          var element = _createMarkup(module, props.content.data);
+	          var msg_id = msg.parent_header.msg_id;
+	          var cell = Jupyter.notebook.get_msg_cell(msg_id);
+	          var element = _createMarkup(module, _extends({}, props.content.data, { cell: cell, comm: comm }));
 	          _render(element, msg);
 	          break;
 	      }
@@ -229,26 +237,14 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 
 	  // Create React Elements from components and props 
 	  var _createMarkup = function _createMarkup(mod, newProps) {
-	    newProps.comm = comm;
 	    return React.createElement(_components2.default[mod], newProps);
 	  };
 
-	  // TODO this is sketchy
-	  // improve lookup of msg cell's "output_area.output_subarea" 
+	  // Get the DOM Element to render to
 	  var _outputAreaElement = function _outputAreaElement(msg) {
 	    var msg_id = msg.parent_header.msg_id;
 	    var cell = Jupyter.notebook.get_msg_cell(msg_id);
-	    return cell.reactwidgetarea.widget_subarea;
-
-	    //var output_area = Jupyter.notebook.get_msg_cell( msg_id ).output_area.element[0];
-	    //var output_area = parentEl.children[0];
-	    //var newDiv = document.createElement("div");
-	    //console.log('oputput', output_area, msg_id, Jupyter.notebook.get_msg_cell( msg_id ).output_area.element)
-	    //output_area.children[1].appendChild(newDiv); 
-	    //output_area.appendChild(newDiv); 
-
-	    //return output_area.children[1];
-	    //return newDiv;
+	    return cell.react_dom.widget_subarea;
 	  };
 
 	  // register message callback
@@ -748,9 +744,7 @@ define(function() { return /******/ (function(modules) { // webpackBootstrap
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 	function selectKernel(props, kernel) {
-	  //console.log('SENDING', { method: 'select', data: { kernel } });
-	  //console.log(props.comm)
-	  props.comm.send({ method: 'select', data: { kernel: kernel } });
+	  props.comm.send({ method: 'select', data: { kernel: kernel } }, props.cell.get_callbacks());
 	}
 
 	function buildList(props) {

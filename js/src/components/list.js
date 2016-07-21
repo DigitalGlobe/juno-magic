@@ -1,9 +1,7 @@
 import React from 'react';
 
 function selectKernel( props, kernel ){
-  //console.log('SENDING', { method: 'select', data: { kernel } });
-  //console.log(props.comm)
-  props.comm.send({ method: 'select', data: { kernel } });
+  props.comm.send({ method: 'select', data: { kernel } }, props.cell.get_callbacks());
 }
 
 function buildList( props ) {

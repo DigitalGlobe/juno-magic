@@ -19,7 +19,9 @@ export default function Component( comm, props ) {
           });
           break;
         case "display":
-          var element = _createMarkup( module, props.content.data );
+          var msg_id = msg.parent_header.msg_id;
+          var cell = Jupyter.notebook.get_msg_cell( msg_id );
+          var element = _createMarkup( module, { ...props.content.data, cell, comm } );
           _render( element, msg );
           break;
       }
@@ -40,27 +42,15 @@ export default function Component( comm, props ) {
 
   // Create React Elements from components and props 
   var _createMarkup = function( mod, newProps ){
-    newProps.comm = comm;
     return React.createElement( components[ mod ], newProps );
   };
 
 
-  // TODO this is sketchy
-  // improve lookup of msg cell's "output_area.output_subarea" 
+  // Get the DOM Element to render to
   var _outputAreaElement = function( msg ) {
     var msg_id = msg.parent_header.msg_id;
     var cell = Jupyter.notebook.get_msg_cell( msg_id );
-    return cell.reactwidgetarea.widget_subarea;
-
-    //var output_area = Jupyter.notebook.get_msg_cell( msg_id ).output_area.element[0];
-    //var output_area = parentEl.children[0];
-    //var newDiv = document.createElement("div");
-    //console.log('oputput', output_area, msg_id, Jupyter.notebook.get_msg_cell( msg_id ).output_area.element)
-    //output_area.children[1].appendChild(newDiv); 
-    //output_area.appendChild(newDiv); 
-
-    //return output_area.children[1];
-    //return newDiv;
+    return cell.react_dom.widget_subarea;
   }
 
   // register message callback

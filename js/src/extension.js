@@ -10,8 +10,9 @@ if (window.require) {
     });
 }
 
+//import JupyterReact from 'JupyterReact';
 import Manager from "./manager";
-import WidgetArea from "./widget_area";
+import ComponentDOM from "./widget_area";
 
 var handle_kernel = function(Jupyter, kernel) {
     if ( kernel.comm_manager && !kernel.component_manager ) {
@@ -21,8 +22,8 @@ var handle_kernel = function(Jupyter, kernel) {
 
 var handle_cell = function(cell) {
     if (cell.cell_type==='code') {
-        var area = new WidgetArea(cell);
-        cell.reactwidgetarea = area;
+        var domEl = new ComponentDOM(cell);
+        cell.react_dom = domEl;
     }
 };
 

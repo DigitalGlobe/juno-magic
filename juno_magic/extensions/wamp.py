@@ -310,11 +310,16 @@ class JunoMagics(Magics):
             if not html:
                 returnValue(prefix_map)
             else:
-                def hello(*args, **kwargs):
-                    display(Javascript('alert("wtf")'))
+                def select_kernel(component, *args, **kwargs):
+                    js = """
+                        var cell = IPython.notebook.insert_cell_below('code', IPython.notebook.get_selected_index());
+                        cell.code_mirror.setValue( '{}' );
+                        cell.execute();
+                    """.format('%juno select "{}"'.format(args[0]['data']['data']['kernel']))
+                    display(Javascript(js))
 
                 list_comp = List( prefix_map )
-                list_comp.on_select(hello)
+                list_comp.on_select(select_kernel)
                 display(list_comp)
         else:
             returnValue(output)
