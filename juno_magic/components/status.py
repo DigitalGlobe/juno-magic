@@ -1,5 +1,5 @@
 from traitlets import Unicode, observe
-from component import Component
+from jupyter_react import Component
 
 class Status(Component):
     module = 'Status'

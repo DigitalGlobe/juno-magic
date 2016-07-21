@@ -1,10 +1,10 @@
-from component import Component, CallbackDispatcher
+from jupyter_react import Component, CallbackDispatcher
 
 class List(Component):
     module = 'List'
 
     def __init__(self, prefix_map, **kwargs):
-        super(List, self).__init__(props={'items': prefix_map})
+        super(List, self).__init__(target_name='juno', props={'items': prefix_map})
         self._select_handlers = CallbackDispatcher()
         self.on_msg(self._handle_select_msg)
 

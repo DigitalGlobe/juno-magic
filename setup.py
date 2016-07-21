@@ -1,5 +1,6 @@
 from setuptools import setup
 from setuptools.command.develop import develop as _develop
+from setuptools.command.install import install as _install
 from notebook.nbextensions import install_nbextension
 from notebook.services.config import ConfigManager
 import os
@@ -50,6 +51,8 @@ setup(name='juno-magic',
           "pyopenssl",
           "service_identity",
           "requests",
-          "zope.interface"
+          "zope.interface",
+          "jupyter-react",
+          "traitlets"
         ]
       )
