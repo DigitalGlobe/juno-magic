@@ -25,6 +25,7 @@ module.exports = [
           path: '../juno_magic/static',
           libraryTarget: 'amd'
       },
+      externals: [{'react': 'react'}],
       module : {
         loaders : [
           {

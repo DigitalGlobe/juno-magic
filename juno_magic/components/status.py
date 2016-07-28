@@ -7,7 +7,7 @@ class Status(Component):
 
     def __init__(self, **kwargs):
         super(self.__class__, self).__init__(target_name='juno')
-        self.open({'domId': 'juno_status'})
+        #self.open({'domId': 'juno_status'})
         self.send({"method": "display"})
 
     @observe('current_status')
