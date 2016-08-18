@@ -97,6 +97,8 @@ def build_bridge_class(client):
         def list(self):
             return list(self.prefix_list)
 
+        # This is relies heavily on shell_channel property on the client
+        # need to pay attention to Jupyter.client if/when this changes...
         @wamp.register(u"io.timbr.kernel.{}.comm_msg".format(_key))
         def comm_msg(self, *args, **kwargs):
             msg = kwargs.get('msg', {})
