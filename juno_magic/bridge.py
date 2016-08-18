@@ -97,6 +97,12 @@ def build_bridge_class(client):
         def list(self):
             return list(self.prefix_list)
 
+        @wamp.register(u"io.timbr.kernel.{}.comm_msg".format(_key))
+        def comm_msg(self, *args, **kwargs):
+            msg = kwargs.get('msg', {})
+            log.msg("[comm_msg] {}".format(pformat(json_clean(msg))))
+            return client.shell_channel.send(msg)
+
         @inlineCallbacks
         def proxy_iopub_channel(self):
             while True:
