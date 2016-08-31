@@ -45,7 +45,7 @@ import requests
 import re
 
 
-JUNO_KERNEL_URI = "https://juno.timbr.io/api/kernels/list"
+JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/api/kernels/list")
 
 
 def publish_to_display(obj):
