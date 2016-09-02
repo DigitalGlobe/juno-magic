@@ -61,6 +61,27 @@ def build_display_data(obj):
         output["application/javascript"] = obj._repr_javascript_()
     return output
 
+def handle_comm_open(msg):
+    comm_manager = get_ipython().kernel.comm_manager
+    # set up the on open callback in the comm_manager for the new comms
+    comm_manager.register_target(msg['content']['target_name'], on_comm_open)
+    # create the Comm in the comm_manager and forward the comm and msg to on_comm_open
+    comm_manager.comm_open(None, None, msg)
+
+def on_comm_open(comm, msg):
+    content = msg['content']
+    comm._publish_msg('comm_open',
+        data=content['data'], metadata={"echo": True}, buffers=None,
+        target_name=content['target_name'],
+        target_module=None
+    )
+
+def handle_comm_msg(msg):
+    content = msg['content']
+    comm_id = content['comm_id']
+    get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg('comm_msg',
+        data=content['data'], metadata={"echo": True}, buffers=None
+    )
 
 def build_bridge_class(magics_instance):
     class WampConnectionComponent(ApplicationSession):
@@ -106,6 +127,10 @@ def build_bridge_class(magics_instance):
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
             elif msg["msg_type"] == "status":
                 display(Javascript('$("#juno_status").trigger("update", ["{}"])'.format(msg["content"]["execution_state"])))
+            elif msg["msg_type"] in ["comm_open"]:
+                handle_comm_open( msg)
+            elif msg["msg_type"] in ["comm_msg"]:
+                handle_comm_msg(msg)
             elif msg["msg_type"] in ["execute_input", "execution_state"]:
                 pass
             else:
