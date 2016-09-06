@@ -68,6 +68,12 @@ def handle_comm_open(msg):
     # create the Comm in the comm_manager and forward the comm and msg to on_comm_open
     comm_manager.comm_open(None, None, msg)
 
+#
+# In order to relay comm_open and comm_msg message types we're calling a private method: _publish_msg
+# the reason is that we effectively want to call `session.send` which _publish_msg does
+# but by calling _publish_msg directly we avoid other artifacts from calling "open" and "session.send".
+# (this note is meant to provide reference in case jupyter's private methods change).
+#
 def on_comm_open(comm, msg):
     content = msg['content']
     comm._publish_msg('comm_open',
