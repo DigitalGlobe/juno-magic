@@ -186,19 +186,21 @@ def build_bridge_class(magics_instance):
                 print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
             returnValue(None)
 
+        @inlineCallbacks
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
             super(self.__class__, self).onLeave(details)
+            magics_instance.set_connection(None)
+            log.msg("set magics connection to None")
+            returnValue(None)
 
-        @inlineCallbacks
         def onDisconnect(self):
             # onDisconnect we should just set the connection to None so that we know to reconnect
             # next time connect is called
-            magics_instance.set_connection(None)
-
+            #magics_instance.set_connection(None)
+            pass
     return WampConnectionComponent
-
 
 @magics_class
 class JunoMagics(Magics):
@@ -221,6 +223,9 @@ class JunoMagics(Magics):
             self._kernel_key = config["key"]
 
         self._parser = self.generate_parser()
+
+        self._logger = log
+        self._logger.startLogging(open("juno-magic-logger"), "w")
 
     def set_connection(self, wamp_connection):
         log.msg("[set_connection] Connection component set.")
