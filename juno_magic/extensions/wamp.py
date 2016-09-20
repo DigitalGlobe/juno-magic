@@ -28,10 +28,11 @@ except ReactorAlreadyInstalledError:
 
 from twisted.python import log
 from twisted.internet import reactor, threads
+from twisted.internet.task import LoopingCall
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
 from autobahn.twisted.wamp import ApplicationSession
 from autobahn import wamp
-from autobahn.wamp.exception import ApplicationError
+from autobahn.wamp.exception import ApplicationError, TransportLost
 from autobahn.websocket.util import parse_url
 from autobahn.twisted.util import sleep as absleep
 
@@ -216,6 +217,7 @@ class JunoMagics(Magics):
         self._token = os.environ.get("JUNO_AUTH_TOKEN")
         self._sp = None
         self._connected = None
+        self._connection_manager = LoopingCall(self.manage_connections)
 
         # set local kernel key
         with open(self._connection_file) as f:
@@ -223,9 +225,6 @@ class JunoMagics(Magics):
             self._kernel_key = config["key"]
 
         self._parser = self.generate_parser()
-
-        self._logger = log
-        self._logger.startLogging(open("juno-magic-logger"), "w")
 
     def set_connection(self, wamp_connection):
         log.msg("[set_connection] Connection component set.")
@@ -304,6 +303,9 @@ class JunoMagics(Magics):
             self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
             log.msg("Connecting to router: {}".format(self._router_url))
             log.msg("  Project Realm: {}".format(self._realm))
+
+        # Start the connection manager loop
+        self._connection_manager.start(5)
         return self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
     def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
@@ -344,8 +346,9 @@ class JunoMagics(Magics):
             returnValue(output)
 
     @inlineCallbacks
-    def select(self, kernel, **kwargs):
-        yield self.connect(self._router_url)
+    def select(self, kernel, reconnect=True, **kwargs):
+        if reconnect:
+            yield self.connect(self._router_url)
         @inlineCallbacks
         def _select(prefix):
             yield self._wamp.reset_prefix()
@@ -369,6 +372,7 @@ class JunoMagics(Magics):
         if kernel in prefix_list:
             if kernel != self._kernel_prefix:
                 yield _select(kernel)
+
             else:
                 print("Kernel already selected")
         else:
@@ -386,6 +390,46 @@ class JunoMagics(Magics):
         if prefix is not None:
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
         output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
+
+    @inlineCallbacks
+    def manage_connections(self):
+        @inlineCallbacks
+        def ping():
+            # returns True or False if we are still connected 
+            # if True, it means everything is ok
+            # if False, it means the remote kernel client has died/is not active
+            res = yield self._wamp.call(".".join([self._wamp_prefix, u"ping"]))
+            returnValue(res)      
+        
+        @inlineCallbacks
+        def prefix_heartbeat():
+            if self._kernel_prefix is not None:
+                try:
+                    res = yield ping()
+                    if not res:
+                        print("Remote client currently inactive, try reconnecting later")
+                        self._kernel_prefix = None
+                        self._prefix_alive = False
+                        yield self._wamp.reset_prefix()
+                    else:
+                        self._prefix_alive = True
+                except ApplicationError as ae:
+                    if ae.error == ApplicationError.NO_SUCH_PROCEDURE and self._prefix_alive:
+                        print("Remote bridge currently unconnected, waiting for reconnection")
+                        self._prefix_alive = False
+                returnValue(self._prefix_alive)
+
+        if self._wamp is not None:
+            # Reconnect to WAMP router if session has closed, do nothing if
+            # self._wamp is currently None
+            if not self._wamp_runner.isOpen():
+                yield self.connect(self._router_url)
+                # Try to select the kernel again and finish
+                if self._kernel_prefix is not None:
+                    yield self.select(self._kernel_prefix, reconnect=False)
+            else:
+                # Just check the kernel_prefix status
+                yield self.prefix_heartbeat()
 
     def _get_kernel_names(self, prefix_list, details=False):
         headers = {"Authorization": "Bearer {}".format(self._token)}
