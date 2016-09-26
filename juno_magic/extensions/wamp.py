@@ -185,6 +185,8 @@ def build_bridge_class(magics_instance):
                 print("Attempting to reconnect to {}".format(magics_instance._kernel_prefix))
                 yield self.set_prefix(magics_instance._kernel_prefix)
                 print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
+                if not magics_instance._heartbeat.running:
+                    magics_instance._heartbeat.start(5, now=False)
             returnValue(None)
 
         @inlineCallbacks
@@ -232,7 +234,7 @@ class JunoMagics(Magics):
         if wamp_connection is not None:
             self._connected.callback(wamp_connection)
         else:
-            if self._heartbeat.running():
+            if self._heartbeat.running:
                 self._heartbeat.stop()
 
     def generate_parser(self):
