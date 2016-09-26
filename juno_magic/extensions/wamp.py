@@ -349,6 +349,7 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def select(self, kernel, **kwargs):
+        yield self.connect(self._router_url)
         @inlineCallbacks
         def _select(prefix):
             yield self._wamp.reset_prefix()
@@ -372,7 +373,8 @@ class JunoMagics(Magics):
         if kernel in prefix_list:
             if kernel != self._kernel_prefix:
                 yield _select(kernel)
-                self._connection_hb.start(5)
+                if not self._connection_hb.running:
+                    self._connection_hb.start(5)
             else:
                 print("Kernel already selected")
         else:
