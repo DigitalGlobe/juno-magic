@@ -217,7 +217,7 @@ class JunoMagics(Magics):
         self._token = os.environ.get("JUNO_AUTH_TOKEN")
         self._sp = None
         self._connected = None
-        self._connection_hb = LoopingCall(self.heartbeat)
+        self._heartbeat = LoopingCall(self._ping)
 
         # set local kernel key
         with open(self._connection_file) as f:
@@ -232,8 +232,8 @@ class JunoMagics(Magics):
         if wamp_connection is not None:
             self._connected.callback(wamp_connection)
         else:
-            if self._connection_hb.running():
-                self._connection_hb.stop()
+            if self._heartbeat.running():
+                self._heartbeat.stop()
 
     def generate_parser(self):
         parser = argparse.ArgumentParser(prog="juno")
@@ -373,8 +373,8 @@ class JunoMagics(Magics):
         if kernel in prefix_list:
             if kernel != self._kernel_prefix:
                 yield _select(kernel)
-                if not self._connection_hb.running:
-                    self._connection_hb.start(5)
+                if not self._heartbeat.running:
+                    self._heartbeat.start(5)
             else:
                 print("Kernel already selected")
         else:
@@ -394,17 +394,13 @@ class JunoMagics(Magics):
         output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
 
     @inlineCallbacks
-    def ping(self):
+    def _ping(self):
         # returns True or False if we are still connected 
         # if True, it means everything is ok
         # if False, it means the remote kernel client has died/is not active
-        res = yield self._wamp.call(".".join([self._wamp_prefix, u"ping"]))
-        returnValue(res)
-
-    @inlineCallbacks
-    def heartbeat(self):
         try:
-            self.ping()
+            res = yield self._wamp.call(".".join([self._wamp_prefix, u"ping"]))
+            returnValue(res)
         except Exception as e:
             self.set_connection(None)
 
