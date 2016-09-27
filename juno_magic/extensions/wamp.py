@@ -186,7 +186,7 @@ def build_bridge_class(magics_instance):
                 yield self.set_prefix(magics_instance._kernel_prefix)
                 print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
                 if not magics_instance._heartbeat.running:
-                    magics_instance._heartbeat.start(5, now=False)
+                    magics_instance._heartbeat.start(self._hb_interval, now=False)
             returnValue(None)
 
         @inlineCallbacks
@@ -219,6 +219,7 @@ class JunoMagics(Magics):
         self._token = os.environ.get("JUNO_AUTH_TOKEN")
         self._sp = None
         self._connected = None
+        self._hb_interval = 10
         self._heartbeat = LoopingCall(self._ping)
 
         # set local kernel key
@@ -338,7 +339,6 @@ class JunoMagics(Magics):
         yield self.connect(self._router_url)
         try:
             output = yield self._wamp.call(u"io.timbr.kernel.list")
-            print(output)
             try:
                 output.remove(self._kernel_key)
             except ValueError:
@@ -380,7 +380,7 @@ class JunoMagics(Magics):
             if kernel != self._kernel_prefix:
                 yield _select(kernel)
                 if not self._heartbeat.running:
-                    self._heartbeat.start(5)
+                    self._heartbeat.start(self._hb_interval)
             else:
                 print("Kernel already selected")
         else:
