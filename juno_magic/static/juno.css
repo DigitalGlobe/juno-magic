@@ -1,7 +1,0 @@
-#juno_status .kernel_idle_icon {
- color: green;
-}
-
-#juno_status .kernel_busy_icon {
- color: red;
-}

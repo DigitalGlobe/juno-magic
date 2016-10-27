@@ -11,8 +11,7 @@ setup(name='juno-magic',
       zip_safe=False,
       data_files=[
         ('share/jupyter/nbextensions/juno_magic', [
-            'juno_magic/static/index.js',
-            'juno_magic/static/juno.css'
+            'juno_magic/static/index.js'
         ]),
       ],
       entry_points={

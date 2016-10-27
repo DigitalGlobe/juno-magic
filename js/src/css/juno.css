@@ -1,0 +1,17 @@
+#juno_status .kernel_idle_icon {
+ color: green;
+}
+
+#juno_status .kernel_busy_icon {
+ color: red;
+}
+
+#notebook-container {
+  padding-left: 80px;
+}
+
+.juno-sidebar {
+  position: absolute;
+  left: 45px;
+  top: 35px;
+}
