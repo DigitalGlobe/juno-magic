@@ -8,10 +8,11 @@
 
 #notebook-container {
   padding-left: 80px;
+  position: relative;
 }
 
 .juno-sidebar {
   position: absolute;
-  left: 45px;
-  top: 35px;
+  left: 0px;
+  top: 0px;
 }
