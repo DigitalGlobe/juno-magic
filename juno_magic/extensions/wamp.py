@@ -135,6 +135,7 @@ def build_bridge_class(magics_instance):
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
             elif msg["msg_type"] == "status":
                 #display(Javascript('$("#juno_status").trigger("update", ["{}"])'.format(msg["content"]["execution_state"])))
+                #if magics_instance._status is not None:
                 magics_instance._status.current_status = msg["content"]["execution_state"]
             elif msg["msg_type"] in ["comm_open"]:
                 handle_comm_open( msg)
@@ -359,6 +360,7 @@ class JunoMagics(Magics):
     @inlineCallbacks
     def select(self, kernel, **kwargs):
         yield self.connect(self._router_url)
+        self._status.kernel = kernel
         @inlineCallbacks
         def _select(prefix):
             yield self._wamp.reset_prefix()
