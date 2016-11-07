@@ -17,10 +17,10 @@ module.exports = [{
     libraryTarget: 'amd'
   },
   module: {
-    preLoaders: [{
-      test: /\.js$/,
-      loader: 'source-map-loader'
-    }],
+    //preLoaders: [{
+    //  test: /\.js$/,
+    //  loader: 'source-map-loader'
+    //}],
     loaders : [{
       test: /\.js?$/,
       exclude: /(node_modules|bower_components)/,
@@ -34,7 +34,11 @@ module.exports = [{
     }]
   },
   resolve: { 
-    fallback: path.join( __dirname, "node_modules" )
-  },
-  devtool: 'cheap-module-source-map'
+    fallback: path.join( __dirname, "node_modules" ),
+    alias: {
+      react: path.resolve('./node_modules/react'),
+      'react-dom': path.resolve('./node_modules/react-dom')
+    }
+  }
+  //devtool: 'cheap-module-source-map'
 }];

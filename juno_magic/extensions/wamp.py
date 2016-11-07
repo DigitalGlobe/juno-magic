@@ -45,6 +45,7 @@ from sh import wampify
 import requests
 import re
 
+from juno_magic.components import Status
 
 JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/api/kernels/list")
 
@@ -133,7 +134,8 @@ def build_bridge_class(magics_instance):
             elif msg["msg_type"] == "execute_result":
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
             elif msg["msg_type"] == "status":
-                display(Javascript('$("#juno_status").trigger("update", ["{}"])'.format(msg["content"]["execution_state"])))
+                #display(Javascript('$("#juno_status").trigger("update", ["{}"])'.format(msg["content"]["execution_state"])))
+                magics_instance._status.current_status = msg["content"]["execution_state"]
             elif msg["msg_type"] in ["comm_open"]:
                 handle_comm_open( msg)
             elif msg["msg_type"] in ["comm_msg"]:
@@ -221,6 +223,7 @@ class JunoMagics(Magics):
         self._connected = None
         self._hb_interval = 10
         self._heartbeat = LoopingCall(self._ping)
+        self._status = Status()
 
         # set local kernel key
         with open(self._connection_file) as f:
