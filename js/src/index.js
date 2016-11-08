@@ -11,10 +11,16 @@ import App from './app';
 function load_ipython_extension () {
 
   const handleCell = cell => {
+    const flag = document.createElement( 'div' );
+    flag.className = 'execution-flag';
+    cell.input[0].appendChild( flag );
+
+    const execution = React.createElement( components.Execute, { cell } );
+    render( execution, flag ); 
+
     if ( Jupyter.notebook.metadata.juno_kernel ) {
       cell.metadata.remote = typeof cell.metadata.remote === 'undefined' ? true : cell.metadata.remote;
     }
-
     cell.execute = execute;
   };
 

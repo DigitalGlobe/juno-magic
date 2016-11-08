@@ -11,8 +11,13 @@
   position: relative;
 }
 
-.juno-sidebar {
+.execution-flag {
   position: absolute;
-  left: 0px;
-  top: 0px;
+  top: 20px;
+  left: 50px;
+  font-size: 10px;
+}
+
+.input {
+  position: relative;
 }

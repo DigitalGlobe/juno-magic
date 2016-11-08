@@ -20,18 +20,22 @@ export default function execute( stop_on_error ) {
     this.set_input_prompt(null);
     return;
   }
+
   this.set_input_prompt( '*' );
   this.element.addClass( "running" );
   var callbacks = this.get_callbacks();
+
   let code = this.get_text();
   if ( Jupyter.notebook.metadata.juno_kernel && this.metadata.remote ) {
     code = '%%juno\n' + code;
   } 
+
   this.last_msg_id = this.kernel.execute( code, callbacks, { 
     silent: false, 
     store_history: true,
     stop_on_error: stop_on_error
   } );
+
   //CodeCell.msg_cells[ this.last_msg_id ] = this;
   this.render();
   this.events.trigger( 'execute.CodeCell', { cell: this } );
