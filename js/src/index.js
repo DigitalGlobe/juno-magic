@@ -3,19 +3,20 @@ import { render } from 'react-dom';
 import JupyterReact from 'jupyter-react-js';
 import components from './components';
 import dispatcher from './components/dispatcher';
+import execute from './lib/cell';
 import './css/juno.css';
 
 import App from './app';
 
 function load_ipython_extension () {
 
-  // TODO
-  // require events  
-  /*
-    events.on( 'create.Cell', ( event, data ) => {
-      get cell, override get_text to add %% juno when nb metadata has a kernel
-    });
-  */
+  const handleCell = cell => {
+    if ( Jupyter.notebook.metadata.juno_kernel ) {
+      cell.metadata.remote = typeof cell.metadata.remote === 'undefined' ? true : cell.metadata.remote;
+    }
+
+    cell.execute = execute;
+  };
 
   requirejs([
     "base/js/namespace",
@@ -44,6 +45,15 @@ function load_ipython_extension () {
     
     const app = React.createElement( App, {} );
     render( app, sidebar );
+
+    const cells = Jupyter.notebook.get_cells();
+    cells.forEach( cell => {
+      handleCell( cell );
+    });
+
+    events.on( 'create.Cell', ( event, data ) => {
+      handleCell( data.cell );
+    });
 
   });
 }
