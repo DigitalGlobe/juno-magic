@@ -1,4 +1,7 @@
 const path = require( 'path' );
+const webpack = require( 'webpack' );
+
+const envVars = [ 'NODE_ENV' ];
 
 const babelSettings = {
   plugins: [
@@ -17,10 +20,10 @@ module.exports = [{
     libraryTarget: 'amd'
   },
   module: {
-    preLoaders: [{
-      test: /\.js$/,
-      loader: 'source-map-loader'
-    }],
+    //preLoaders: [{
+      //test: /\.js$/,
+      //loader: 'source-map-loader'
+    //}],
     loaders : [{
       test: /\.js?$/,
       exclude: /(node_modules|bower_components)/,
@@ -31,14 +34,30 @@ module.exports = [{
     }, {
       test: /\.less$/, 
       loader: "style!css!less?sourceMap"
+    }, {
+      test: /\.json$/,
+      loader: 'json-loader'
     }]
   },
   resolve: { 
     fallback: path.join( __dirname, "node_modules" ),
     alias: {
       react: path.resolve('./node_modules/react'),
-      'react-dom': path.resolve('./node_modules/react-dom')
+      'react-dom': path.resolve('./node_modules/react-dom'),
+      'autobahn': path.resolve('./node_modules/autobahn')
     }
   },
-  devtool: 'cheap-module-source-map'
+  node: {
+    fs: "empty",
+    net: "empty",
+    tls: "empty"
+  },
+  //devtool: 'inline-source-map',
+  plugins: [
+    new webpack.EnvironmentPlugin( envVars ),
+    new webpack.NoErrorsPlugin(),
+    new webpack.HotModuleReplacementPlugin(),
+    new webpack.IgnorePlugin(/^mock-firmata$/),
+    new webpack.ContextReplacementPlugin(/bindings$/, /^$/)
+  ]
 }];

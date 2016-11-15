@@ -4,6 +4,7 @@ import JupyterReact from 'jupyter-react-js';
 import components from './components';
 import dispatcher from './components/dispatcher';
 import execute from './lib/cell';
+
 import './css/juno.css';
 
 import App from './app';
@@ -26,7 +27,7 @@ function load_ipython_extension () {
 
   requirejs([
     "base/js/namespace",
-    "base/js/events",
+    "base/js/events"
   ], function( Jupyter, events ) {
   
     // create the side bar dom
@@ -47,7 +48,7 @@ function load_ipython_extension () {
       });
     }
 
-    JupyterReact.init( Jupyter, events, 'juno.status', { components, on_update, element: statusWrapper } );
+    JupyterReact.init( Jupyter, events, 'juno.status', { components, on_update, element: statusWrapper, save: true } );
     
     const app = React.createElement( App, {} );
     render( app, sidebar );
