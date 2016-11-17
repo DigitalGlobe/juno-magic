@@ -28,7 +28,6 @@ setup(name='juno-magic',
           "pyopenssl",
           "service_identity",
           "requests",
-          "zope.interface",
-          "jupyter-react==0.1.7"
+          "zope.interface"
         ]
       )

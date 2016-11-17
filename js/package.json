@@ -19,6 +19,11 @@
   "devDependencies": {
     "css-loader": "^0.23.1",
     "json-loader": "^0.5.4",
+    "postcss-import": "^8.2.0",
+    "postcss-import": "^8.2.0",
+    "postcss-loader": "^0.13.0",
+    "postcss-modules-values": "^1.2.2",
+    "postcss-nested": "^1.0.0",
     "jsx-loader": "^0.13.2",
     "less": "^2.7.1",
     "less-loader": "^2.2.3",
@@ -40,7 +45,6 @@
     "react": "15.x",
     "react-dom": "15.x",
     "react-hot-loader": "^1.3.0",
-    "jupyter-react-js": "^0.5.1",
     "@timbr/react-machine": "^0.1.0"
   }
 }

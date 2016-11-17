@@ -45,7 +45,6 @@ from sh import wampify
 import requests
 import re
 
-from juno_magic.components import Status
 
 JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/api/kernels/list")
 
@@ -133,15 +132,11 @@ def build_bridge_class(magics_instance):
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
             elif msg["msg_type"] == "execute_result":
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
-            elif msg["msg_type"] == "status":
-                #display(Javascript('$("#juno_status").trigger("update", ["{}"])'.format(msg["content"]["execution_state"])))
-                #if magics_instance._status is not None:
-                magics_instance._status.current_status = msg["content"]["execution_state"]
             elif msg["msg_type"] in ["comm_open"]:
                 handle_comm_open( msg)
             elif msg["msg_type"] in ["comm_msg"]:
                 handle_comm_msg(msg)
-            elif msg["msg_type"] in ["execute_input", "execution_state"]:
+            elif msg["msg_type"] in ["execute_input", "execution_state", "status"]:
                 pass
             else:
                 pprint(msg)
@@ -224,7 +219,6 @@ class JunoMagics(Magics):
         self._connected = None
         self._hb_interval = 10
         self._heartbeat = LoopingCall(self._ping)
-        self._status = Status()
 
         # set local kernel key
         with open(self._connection_file) as f:
@@ -315,7 +309,7 @@ class JunoMagics(Magics):
             self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
             log.msg("Connecting to router: {}".format(self._router_url))
             log.msg("  Project Realm: {}".format(self._realm))
-
+        
         # Start the connection manager loop
         return self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
@@ -360,7 +354,6 @@ class JunoMagics(Magics):
     @inlineCallbacks
     def select(self, kernel, **kwargs):
         yield self.connect(self._router_url)
-        self._status.kernel = kernel
         @inlineCallbacks
         def _select(prefix):
             yield self._wamp.reset_prefix()

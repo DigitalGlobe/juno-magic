@@ -2,10 +2,9 @@ import React from 'react';
 import { render } from 'react-dom';
 import JupyterReact from 'jupyter-react-js';
 import components from './components';
-import dispatcher from './components/dispatcher';
 import execute from './lib/cell';
 
-import './css/juno.css';
+import '!style!css!./css/juno.css';
 
 import App from './app';
 
@@ -30,29 +29,17 @@ function load_ipython_extension () {
     "base/js/events"
   ], function( Jupyter, events ) {
   
-    // create the side bar dom
+    //------- MACHINE UI --------//
     const sidebar = document.createElement( 'div' );
     sidebar.classList.add( 'juno-sidebar' );
     const notebookContainer = document.getElementById( 'notebook-container' );
     notebookContainer.insertBefore( sidebar, notebookContainer.firstChild );
 
-    const statusWrapper = document.createElement( 'span' );
-    statusWrapper.id = "juno_status_wrapper";
-    const indicator = document.getElementById( 'kernel_indicator' );
-    indicator.appendChild( statusWrapper );
-    
-    const on_update = ( module, props ) => {
-      dispatcher.dispatch({
-        actionType: module.toLowerCase() + '_update',
-        data: props
-      });
-    }
-
-    JupyterReact.init( Jupyter, events, 'juno.status', { components, on_update, element: statusWrapper, save: true } );
-    
     const app = React.createElement( App, {} );
     render( app, sidebar );
 
+
+    //------- CELL Overides ------//
     const cells = Jupyter.notebook.get_cells();
     cells.forEach( cell => {
       handleCell( cell );
