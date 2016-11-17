@@ -1,6 +1,5 @@
 import React from 'react';
 import { render } from 'react-dom';
-import JupyterReact from 'jupyter-react-js';
 import components from './components';
 import execute from './lib/cell';
 
