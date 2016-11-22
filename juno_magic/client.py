@@ -20,7 +20,8 @@ import zmq
 from traitlets import Type
 from jupyter_client.channels import HBChannel
 from jupyter_client.client import KernelClient
-from .channels import ZMQSocketChannel
+# from .channels import ZMQSocketChannel
+from jupyter_client.blocking.channels import ZMQSocketChannel
 
 try:
     monotonic = time.monotonic
@@ -84,7 +85,8 @@ class BlockingKernelClient(KernelClient):
         else:
             abs_timeout = time.time() + timeout
 
-        from ..manager import KernelManager
+        #from ..manager import KernelManager
+        from jupyter_client.manager import KernelManager
         if not isinstance(self.parent, KernelManager):
             # This Client was not created by a KernelManager,
             # so wait for kernel to become responsive to heartbeats
