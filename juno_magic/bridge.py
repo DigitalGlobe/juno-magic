@@ -64,7 +64,7 @@ def build_bridge_class(client):
         @inlineCallbacks
         def execute_interactive(self, *args, **kwargs):
             result = yield threads.deferToThread(client.execute_interactive, *args, **kwargs)
-            returnValue(result)
+            returnValue(json_clean(result))
 
         @wamp.register(u"io.timbr.kernel.{}.complete".format(_key))
         @inlineCallbacks
