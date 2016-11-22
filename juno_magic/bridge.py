@@ -60,6 +60,12 @@ def build_bridge_class(client):
         prefix_list = set()
         machine_connection = None
         
+        @wamp.register(u"io.timbr.kernel.{}.execute".format(_key))
+        @inlineCallbacks
+        def execute(self, *args, **kwargs):
+            result = yield client.execute(*args, **kwargs)
+            returnValue(result)
+
         @wamp.register(u"io.timbr.kernel.{}.execute_interactive".format(_key))
         @inlineCallbacks
         def execute_interactive(self, *args, **kwargs):
