@@ -46,26 +46,30 @@ def reqrep(meth):
 
         return self._recv_reply(msg_id, timeout=timeout)
     
-    basedoc, _ = meth.__doc__.split('Returns\n', 1)
-    parts = [basedoc.strip()]
-    if 'Parameters' not in basedoc:
+    try:    
+        basedoc, _ = meth.__doc__.split('Returns\n', 1)
+        parts = [basedoc.strip()]
+        if 'Parameters' not in basedoc:
+            parts.append("""
+            Parameters
+            ----------
+            """)
         parts.append("""
-        Parameters
-        ----------
+            reply: bool (default: False)
+                Whether to wait for and return reply
+            timeout: float or None (default: None)
+                Timeout to use when waiting for a reply
+            Returns
+            -------
+            msg_id: str
+                The msg_id of the request sent, if reply=False (default)
+            reply: dict
+                The reply message for this request, if reply=True
         """)
-    parts.append("""
-        reply: bool (default: False)
-            Whether to wait for and return reply
-        timeout: float or None (default: None)
-            Timeout to use when waiting for a reply
-        Returns
-        -------
-        msg_id: str
-            The msg_id of the request sent, if reply=False (default)
-        reply: dict
-            The reply message for this request, if reply=True
-    """)
-    wrapped.__doc__ = '\n'.join(parts)
+        wrapped.__doc__ = '\n'.join(parts)
+    except ValueError as ve:
+        pass
+
     return wrapped
 
 class BlockingKernelClient(KernelClient):
