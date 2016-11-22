@@ -8,10 +8,12 @@ try:
 except ReactorAlreadyInstalledError:
     pass
 
-from jupyter_client.blocking.client import BlockingKernelClient
+#from jupyter_client.blocking.client import BlockingKernelClient
+from .client import BlockingKernelClient
 from ipykernel.jsonutil import json_clean
 
 from twisted.python import log
+from twisted.internet import threads
 from twisted.internet.defer import inlineCallbacks, returnValue, CancelledError
 from twisted.internet.task import LoopingCall
 from twisted.internet.error import ConnectionRefusedError
@@ -57,10 +59,11 @@ def build_bridge_class(client):
         iopub_deferred = None
         prefix_list = set()
         machine_connection = None
-        @wamp.register(u"io.timbr.kernel.{}.execute".format(_key))
+        
+        @wamp.register(u"io.timbr.kernel.{}.execute_interactive".format(_key))
         @inlineCallbacks
-        def execute(self, *args, **kwargs):
-            result = yield client.execute_interactive(*args, **kwargs)
+        def execute_interactive(self, *args, **kwargs):
+            result = yield threads.deferToThread(client.execute_interactive, *args, **kwargs)
             returnValue(result)
 
         @wamp.register(u"io.timbr.kernel.{}.complete".format(_key))
