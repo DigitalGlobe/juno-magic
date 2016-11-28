@@ -14,7 +14,7 @@ from ipykernel.jsonutil import json_clean
 
 from twisted.python import log
 from twisted.internet import threads
-from twisted.internet.defer import inlineCallbacks, returnValue, CancelledError
+from twisted.internet.defer import inlineCallbacks, returnValue, CancelledError, DeferredLock
 from twisted.internet.task import LoopingCall
 from twisted.internet.error import ConnectionRefusedError
 from autobahn.twisted.util import sleep
@@ -59,7 +59,8 @@ def build_bridge_class(client):
         iopub_deferred = None
         prefix_list = set()
         machine_connection = None
-        
+        _lock = DeferredLock()
+
         @wamp.register(u"io.timbr.kernel.{}.execute".format(_key))
         @inlineCallbacks
         def execute(self, *args, **kwargs):
@@ -69,7 +70,13 @@ def build_bridge_class(client):
         @wamp.register(u"io.timbr.kernel.{}.execute_interactive".format(_key))
         @inlineCallbacks
         def execute_interactive(self, *args, **kwargs):
-            result = yield threads.deferToThread(client.execute_interactive, *args, **kwargs)
+            @inlineCallbacks
+            def critical(output_hook=None):
+                kwargs.update({"output_hook": output_hook})
+                result = yield threads.deferToThread(client.execute_interactive, *args, **kwargs)
+                returnValue(result)
+            
+            result = yield self._lock.run(critical, self.publish_iopub_msg)
             returnValue(json_clean(result))
 
         @wamp.register(u"io.timbr.kernel.{}.complete".format(_key))
@@ -116,19 +123,27 @@ def build_bridge_class(client):
 
         @inlineCallbacks
         def proxy_iopub_channel(self):
-            while True:
+            @inlineCallbacks
+            def critical():
                 try:
                     msg = client.get_iopub_msg(block=False)
-                    if(not msg["content"].get("metadata", {}).get("echo", False)):
-                        log.msg("[iopub] {}".format(pformat(json_clean(msg))))
-                        yield self.publish(u"io.timbr.kernel.{}.iopub".format(_key), json_clean(msg))
-                except ValueError as ve:
+                    self.publish_iopub_msg(msg)
+               except ValueError as ve:
                     # This happens when an "invalid signature" is encountered which for us probably
                     # means that the message did not originate from this kernel
                     log.msg("ValueError")
                 except Empty:
                     yield sleep(0.1)
+            
+            while True:
+                yield self._lock.run(critical)
 
+        @inlineCallbacks
+        def publish_iopub_msg(self, msg):
+            if(not msg["content"].get("metadata", {}).get("echo", False)):
+                log.msg("[iopub] {}".format(pformat(json_clean(msg))))
+                yield self.publish(u"io.timbr.kernel.{}.iopub".format(_key), json_clean(msg))
+            
         def proxy_machine_channel(self):
             """
             If there is a timbr-machine zeromq pub channel present for this kernel_id it will be
