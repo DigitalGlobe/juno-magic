@@ -127,7 +127,7 @@ def build_bridge_class(client):
             def critical():
                 try:
                     msg = client.get_iopub_msg(block=False)
-                    self.publish_iopub_msg(msg)
+                    yield self.publish_iopub_msg(msg)
                 except ValueError as ve:
                     # This happens when an "invalid signature" is encountered which for us probably
                     # means that the message did not originate from this kernel
