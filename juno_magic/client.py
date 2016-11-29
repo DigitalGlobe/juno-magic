@@ -295,33 +295,34 @@ class BlockingKernelClient(KernelClient):
             stdin_socket = None
 
         # wait for output and redisplay it
-        while True:
-            if timeout is not None:
-                timeout = max(0, deadline - monotonic())
-                timeout_ms = 1e3 * timeout
-            events = dict(poller.poll(timeout_ms))
-            if not events:
-                raise TimeoutError("Timeout waiting for output")
-            if stdin_socket in events:
-                req = self.stdin_channel.get_msg(timeout=0)
-                stdin_hook(req)
-                continue
-            if iopub_socket not in events:
-                continue
-
-            msg = self.iopub_channel.get_msg(timeout=0)
-
-            if msg['parent_header'].get('msg_id') != msg_id:
-                # not from my request
-                continue
-            output_hook(msg)
-
-            # stop on idle
-            if msg['header']['msg_type'] == 'status' and \
-            msg['content']['execution_state'] == 'idle':
-                break
-
-        # output is done, get the reply
+        # NOTE: Commenting out the following lines so that we can continue to proxy all iopub messages over Wamp 
+#        while True:
+#            if timeout is not None:
+#                timeout = max(0, deadline - monotonic())
+#                timeout_ms = 1e3 * timeout
+#            events = dict(poller.poll(timeout_ms))
+#            if not events:
+#                raise TimeoutError("Timeout waiting for output")
+#            if stdin_socket in events:
+#                req = self.stdin_channel.get_msg(timeout=0)
+#                stdin_hook(req)
+#                continue
+#            if iopub_socket not in events:
+#                continue
+#
+#            msg = self.iopub_channel.get_msg(timeout=0)
+#
+#            if msg['parent_header'].get('msg_id') != msg_id:
+#                # not from my request
+#                continue
+#            output_hook(msg)
+#
+#            # stop on idle
+#            if msg['header']['msg_type'] == 'status' and \
+#            msg['content']['execution_state'] == 'idle':
+#                break
+#
+#        # output is done, get the reply
         if timeout is not None:
             timeout = max(0, deadline - monotonic())
         return self._recv_reply(msg_id, timeout=timeout)
