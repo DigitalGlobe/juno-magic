@@ -31,7 +31,7 @@ function load_ipython_extension () {
     //------- MACHINE UI --------//
     const sidebar = document.createElement( 'div' );
     sidebar.classList.add( 'juno-sidebar' );
-    const notebookContainer = document.getElementById( 'notebook-container' );
+    const notebookContainer = document.getElementById( 'notebook' );
     notebookContainer.insertBefore( sidebar, notebookContainer.firstChild );
 
     const app = React.createElement( App, {} );
