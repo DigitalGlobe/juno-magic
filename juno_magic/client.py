@@ -204,6 +204,16 @@ class BlockingKernelClient(KernelClient):
         else:
             self._output_hook_default(msg)
 
+    def interactive(self, fn, *args, **kwargs):
+        timeout = kwargs.get('timeout', None)
+
+        if timeout is not None:
+            deadline = monotonic() + timeout
+            timeout = max(0, deadline - monotonic())
+
+        msg_id = fn(*args, **kwargs)
+        return self._recv_reply(msg_id, timeout=timeout)
+
     def execute_interactive(self, code, silent=False, store_history=True,
                  user_expressions=None, allow_stdin=None, stop_on_error=True,
                  timeout=None, output_hook=None, stdin_hook=None,
