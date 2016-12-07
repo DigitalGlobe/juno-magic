@@ -8,11 +8,13 @@ try:
 except ReactorAlreadyInstalledError:
     pass
 
-from jupyter_client.blocking.client import BlockingKernelClient
+#from jupyter_client.blocking.client import BlockingKernelClient
+from .client import BlockingKernelClient
 from ipykernel.jsonutil import json_clean
 
 from twisted.python import log
-from twisted.internet.defer import inlineCallbacks, returnValue, CancelledError
+from twisted.internet import threads
+from twisted.internet.defer import inlineCallbacks, returnValue, CancelledError, DeferredLock
 from twisted.internet.task import LoopingCall
 from twisted.internet.error import ConnectionRefusedError
 from autobahn.twisted.util import sleep
@@ -57,11 +59,25 @@ def build_bridge_class(client):
         iopub_deferred = None
         prefix_list = set()
         machine_connection = None
+        _lock = DeferredLock()
+
         @wamp.register(u"io.timbr.kernel.{}.execute".format(_key))
         @inlineCallbacks
         def execute(self, *args, **kwargs):
-            result = yield client.execute_interactive(*args, **kwargs)
+            result = yield client.execute(*args, **kwargs)
             returnValue(result)
+
+        @wamp.register(u"io.timbr.kernel.{}.execute_interactive".format(_key))
+        @inlineCallbacks
+        def execute_interactive(self, *args, **kwargs):
+            result = yield self._lock.run(threads.deferToThread, client.execute_interactive, *args, **kwargs)
+            returnValue(json_clean(result))
+
+        @wamp.register(u"io.timbr.kernel.{}.complete_interactive".format(_key))
+        @inlineCallbacks
+        def complete_interactive(self, *args, **kwargs):
+            result = yield self._lock.run(threads.deferToThread, client.interactive, client.complete, *args, **kwargs)
+            returnValue(json_clean(result))
 
         @wamp.register(u"io.timbr.kernel.{}.complete".format(_key))
         @inlineCallbacks
@@ -212,7 +228,7 @@ def build_bridge_class(client):
 
 def main():
     global _bridge_runner
-    log.startLogging(sys.stderr)
+    log.startLogging(sys.stdout)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="Enable debug output.")
