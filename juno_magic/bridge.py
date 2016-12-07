@@ -228,7 +228,7 @@ def build_bridge_class(client):
 
 def main():
     global _bridge_runner
-    log.startLogging(sys.stderr)
+    log.startLogging(sys.stdout)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="Enable debug output.")
