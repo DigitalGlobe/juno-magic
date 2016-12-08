@@ -13,7 +13,7 @@
     "ipython"
   ],
   "scripts": {
-    "build-prod": "NODE_ENV=production npm i && webpack -p",
+    "build-prod": "NODE_ENV=production npm i && webpack",
     "prepublish": "webpack"
   },
   "devDependencies": {
