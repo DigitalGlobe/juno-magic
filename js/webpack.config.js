@@ -3,6 +3,19 @@ const webpack = require( 'webpack' );
 
 const envVars = [ 'NODE_ENV' ];
 
+const plugins = [
+  new webpack.EnvironmentPlugin( envVars ),
+  new webpack.IgnorePlugin(/^mock-firmata$/),
+  new webpack.ContextReplacementPlugin(/bindings$/, /^$/)
+];
+
+if ( process.env.NODE_ENV === 'production' ) {
+  plugins.push( new webpack.optimize.UglifyJsPlugin({
+    compress: { keep_fnames: true },
+    mangle: false
+  }));
+}
+
 const babelSettings = {
   cacheDirectory: true,
   plugins: [
@@ -42,9 +55,5 @@ module.exports = [{
     net: "empty",
     tls: "empty"
   },
-  plugins: [
-    new webpack.EnvironmentPlugin( envVars ),
-    new webpack.IgnorePlugin(/^mock-firmata$/),
-    new webpack.ContextReplacementPlugin(/bindings$/, /^$/)
-  ]
+  plugins: plugins
 }];
