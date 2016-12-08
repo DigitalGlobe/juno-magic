@@ -11,7 +11,7 @@ const plugins = [
 
 if ( process.env.NODE_ENV === 'production' ) {
   plugins.push( new webpack.optimize.UglifyJsPlugin({
-    compress: { keep_fnames: true },
+    compress: false, //{ keep_fnames: true },
     mangle: false
   }));
 }
