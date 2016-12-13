@@ -86,7 +86,7 @@ def on_comm_open(comm, msg):
 def handle_comm_msg(msg):
     content = msg['content']
     comm_id = content['comm_id']
-    get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg('comm_msg',
+    get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg(msg['msg_type'],
         data=content['data'], metadata={"echo": True}, buffers=None
     )
 
@@ -134,7 +134,7 @@ def build_bridge_class(magics_instance):
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
             elif msg["msg_type"] in ["comm_open"]:
                 handle_comm_open( msg)
-            elif msg["msg_type"] in ["comm_msg"]:
+            elif msg["msg_type"] in ["comm_msg", "comm_close"]:
                 handle_comm_msg(msg)
             elif msg["msg_type"] in ["execute_input", "execution_state", "status"]:
                 pass
