@@ -55,5 +55,6 @@ module.exports = [{
     net: "empty",
     tls: "empty"
   },
-  plugins: plugins
+  plugins: plugins,
+  devtool: process.env.NODE_ENV === 'production' ? 'source-map' : 'eval-source-map'
 }];
