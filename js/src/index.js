@@ -8,10 +8,8 @@ function load_ipython_extension() {
     document.getElementsByTagName( 'head' )[0].appendChild( script );
   }
 
-  requirejs( [
-    "base/js/namespace"
-  ], function( Jupyter ) {
-    Jupyter.notebook.kernel.execute( "import os\nprint os.environ['JUNO_HOST']", {
+  function handleKernel( kernel ) {
+    kernel.execute( "import os\nprint os.environ['JUNO_HOST']", {
       iopub: {
         output: function( response ) {
           var host = 'localhost:3000';
@@ -23,7 +21,20 @@ function load_ipython_extension() {
           loadJuno( host );
         }
       }
-    }, { silent: false } );
+    }, { silent: false } ); 
+  }
+
+  requirejs( [
+    "base/js/namespace",
+    "base/js/events"
+  ], function( Jupyter, Events ) {
+    // On new kernel session create new comm managers
+    if ( Jupyter.notebook && Jupyter.notebook.kernel ) {
+      handleKernel( Jupyter.notebook.kernel );
+    }
+    Events.on( 'kernel_created.Kernel kernel_created.Session', ( event, data ) => {
+      handleKernel( data.kernel );
+    });
   });
 }
 
