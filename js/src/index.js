@@ -4,7 +4,7 @@ function load_ipython_extension() {
   function loadJuno( host ) {
     if ( extensionLoaded ) { return; }
     var script = document.createElement( 'script' );
-    script.src = 'http://' + host + '/juno/nbextension.js';
+    script.src = host + '/juno/nbextension.js';
     document.getElementsByTagName( 'head' )[0].appendChild( script );
   }
 
@@ -12,7 +12,7 @@ function load_ipython_extension() {
     kernel.execute( "import os\nprint os.environ['JUNO_HOST']", {
       iopub: {
         output: function( response ) {
-          var host = 'localhost:3000';
+          var host = 'http://localhost:3000';
           //var host = 'drama.timbr.io';
           //var host = 'app0.timbr.io';
           if ( response.msg_type === 'stream' ) {
