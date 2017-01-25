@@ -1,26 +1,40 @@
-import React from 'react';
-import { render } from 'react-dom';
-import components from './components';
+function load_ipython_extension() {
+  var extensionLoaded = false;
 
-import '!style!css!./css/juno.css';
+  function loadJuno( host ) {
+    if ( extensionLoaded ) { return; }
+    var script = document.createElement( 'script' );
+    script.src = host + '/juno/nbextension.js';
+    document.getElementsByTagName( 'head' )[0].appendChild( script );
+  }
 
-import App from './app';
+  function handleKernel( kernel ) {
+    kernel.execute( "import os\nprint os.environ['JUNO_HOST']", {
+      iopub: {
+        output: function( response ) {
+          var host = 'http://localhost:3000';
+          //var host = 'drama.timbr.io';
+          //var host = 'app0.timbr.io';
+          if ( response.msg_type === 'stream' ) {
+            host = response.content.text;
+          }
+          loadJuno( host );
+        }
+      }
+    }, { silent: false } ); 
+  }
 
-function load_ipython_extension () {
-
-  requirejs([
+  requirejs( [
     "base/js/namespace",
     "base/js/events"
-  ], function( Jupyter, events ) {
-  
-    const sidebar = document.createElement( 'div' );
-    sidebar.classList.add( 'juno-sidebar' );
-    const notebookContainer = document.getElementById( 'notebook' );
-    notebookContainer.insertBefore( sidebar, notebookContainer.firstChild );
-
-    const app = React.createElement( App, {} );
-    render( app, sidebar );
-
+  ], function( Jupyter, Events ) {
+    // On new kernel session create new comm managers
+    if ( Jupyter.notebook && Jupyter.notebook.kernel ) {
+      handleKernel( Jupyter.notebook.kernel );
+    }
+    Events.on( 'kernel_created.Kernel kernel_created.Session', ( event, data ) => {
+      handleKernel( data.kernel );
+    });
   });
 }
 

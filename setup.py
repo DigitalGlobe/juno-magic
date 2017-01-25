@@ -23,7 +23,7 @@ class install(_install):
 
 setup(name='juno-magic',
       cmdclass={'develop': develop, 'install': install},
-      version='0.2.3',
+      version='0.2.4',
       description='IPython magics and utilities to work with bridged kernels',
       url='https://github.com/timbr-io/juno-magic',
       author='Pramukta Kumar',

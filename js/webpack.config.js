@@ -37,10 +37,11 @@ module.exports = [{
   module: {
     loaders : [{
       test: /\.js$/,
-      exclude: /(node_modules|bower_components)/,
+      exclude: /(node_modules|react\-machine)/,
       loaders: [`babel?${JSON.stringify( babelSettings )}`]
     }, {
       test: /\.css$/,
+      exclude: /node_modules/,
       loader: 'style-loader!css-loader?modules&sourceMap&localIdentName=[name]__[local]___[hash:base64:5]&importLoaders=1!postcss-loader?sourceMap'
     }]
   },
@@ -55,5 +56,6 @@ module.exports = [{
     net: "empty",
     tls: "empty"
   },
-  plugins: plugins
+  plugins: plugins,
+  devtool: process.env.NODE_ENV === 'production' ? 'source-map' : 'inline-source-map'
 }];

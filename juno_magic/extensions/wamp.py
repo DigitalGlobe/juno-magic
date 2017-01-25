@@ -46,7 +46,7 @@ import requests
 import re
 
 
-JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/api/kernels/list")
+JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/api/kernels/list")
 
 
 def publish_to_display(obj):
@@ -86,7 +86,7 @@ def on_comm_open(comm, msg):
 def handle_comm_msg(msg):
     content = msg['content']
     comm_id = content['comm_id']
-    get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg('comm_msg',
+    get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg(msg['msg_type'],
         data=content['data'], metadata={"echo": True}, buffers=None
     )
 
@@ -134,7 +134,7 @@ def build_bridge_class(magics_instance):
                 publish_display_data(msg["content"]["data"], metadata={"echo": True})
             elif msg["msg_type"] in ["comm_open"]:
                 handle_comm_open( msg)
-            elif msg["msg_type"] in ["comm_msg"]:
+            elif msg["msg_type"] in ["comm_msg", "comm_close"]:
                 handle_comm_msg(msg)
             elif msg["msg_type"] in ["execute_input", "execution_state", "status"]:
                 pass
@@ -309,7 +309,7 @@ class JunoMagics(Magics):
             self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
             log.msg("Connecting to router: {}".format(self._router_url))
             log.msg("  Project Realm: {}".format(self._realm))
-        
+
         # Start the connection manager loop
         return self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
@@ -399,7 +399,7 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def _ping(self):
-        # returns True or False if we are still connected 
+        # returns True or False if we are still connected
         # if True, it means everything is ok
         # if False, it means the remote kernel client has died/is not active
         try:
