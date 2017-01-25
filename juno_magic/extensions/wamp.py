@@ -46,7 +46,7 @@ import requests
 import re
 
 
-JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/api/kernels/list")
+JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/api/kernels/list")
 
 
 def publish_to_display(obj):
@@ -309,7 +309,7 @@ class JunoMagics(Magics):
             self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
             log.msg("Connecting to router: {}".format(self._router_url))
             log.msg("  Project Realm: {}".format(self._realm))
-        
+
         # Start the connection manager loop
         return self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
@@ -399,7 +399,7 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def _ping(self):
-        # returns True or False if we are still connected 
+        # returns True or False if we are still connected
         # if True, it means everything is ok
         # if False, it means the remote kernel client has died/is not active
         try:
