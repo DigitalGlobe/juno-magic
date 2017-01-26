@@ -346,7 +346,11 @@ class JunoMagics(Magics):
             output = []
         if raw is not True:
             prefix_map = yield threads.deferToThread(self._get_kernel_names, output, details=kwargs.get('details'))
-            returnValue(prefix_map)
+            if prefix_map is not None:
+                returnValue(prefix_map)
+            else:
+                print("Unable to access JUNO_KERNEL_URI, displaying kernel prefixes instead of kernel names")
+                returnValue(output)
         else:
             returnValue(output)
         returnValue(output)
@@ -411,7 +415,10 @@ class JunoMagics(Magics):
     def _get_kernel_names(self, prefix_list, details=False):
         headers = {"Authorization": "Bearer {}".format(self._token)}
         payload = {"addresses": [prefix.split(".")[-1] for prefix in prefix_list]}
-        r = requests.post(JUNO_KERNEL_URI, headers=headers, data=payload)
+        try:
+            r = requests.post(JUNO_KERNEL_URI, headers=headers, data=payload)
+        except Exception as e:
+            return None
         if details:
             prefix_map = {str(v): ".".join(['io.timbr.kernel', str(k)]) for k, v in r.json().iteritems()}
         else:
