@@ -1,11 +1,17 @@
 function load_ipython_extension() {
   var extensionLoaded = false;
 
+  function loadScript( host, name ) {
+    var script = document.createElement( 'script' );
+    script.src = host + `/juno/${name}.js`;
+    document.head.appendChild( script );
+    return script;
+  }
+
   function loadJuno( host ) {
     if ( extensionLoaded ) { return; }
-    var script = document.createElement( 'script' );
-    script.src = host + '/juno/nbextension.js';
-    document.getElementsByTagName( 'head' )[0].appendChild( script );
+    loadScript( host, 'vendor' )
+      .onload = () => loadScript( host, 'nbextension' );
   }
 
   function handleKernel( kernel ) {
