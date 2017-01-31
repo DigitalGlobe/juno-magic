@@ -136,7 +136,7 @@ def build_bridge_class(magics_instance):
                 handle_comm_open( msg)
             elif msg["msg_type"] in ["comm_msg", "comm_close"]:
                 handle_comm_msg(msg)
-            elif msg["msg_type"] in ["execute_input", "execution_state", "status"]:
+            elif msg["msg_type"] in ["execute_input", "execution_state", "status", "clear_output"]:
                 pass
             else:
                 pprint(msg)
