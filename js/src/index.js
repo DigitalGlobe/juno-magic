@@ -1,17 +1,28 @@
 function load_ipython_extension() {
   var extensionLoaded = false;
+  var reqReact = window.requirejs.config({
+    paths: {
+      'react': 'https://unpkg.com/react@15/dist/react',
+      'react-dom': 'https://unpkg.com/react-dom@15/dist/react-dom'
+    }
+  })
 
   function loadScript( host, name ) {
     var script = document.createElement( 'script' );
-    script.src = host + `/juno/${name}.js`;
+    script.src = name
+      ? host + `/juno/${name}.js`
+      : host;
     document.head.appendChild( script );
     return script;
   }
 
   function loadJuno( host ) {
     if ( extensionLoaded ) { return; }
-    loadScript( host, 'vendor' )
-      .onload = () => loadScript( host, 'nbextension' );
+    reqReact([ 'react', 'react-dom' ], () => {
+      reqReact([ host + '/juno/vendor.js'], () => {
+        reqReact([ host + '/juno/nbextension.js'], () => {});
+      });
+    });
   }
 
   function handleKernel( kernel ) {
