@@ -40,7 +40,11 @@ from juno_magic.runner import JunoRunner
 
 from collections import deque
 
-from sh import wampify
+try:
+    from sh import wampify
+    _ENABLE_START_BRIDGE = True
+except ImportError:
+    _ENABLE_START_BRIDGE = False
 
 import requests
 import re
@@ -313,24 +317,32 @@ class JunoMagics(Magics):
         # Start the connection manager loop
         return self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
-    def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
-        self.stop_bridge()
-        if token is None:
-            token = self._token
-        self._sp = wampify(self._connection_file, "--wamp-url", wamp_url, "--token", token, _bg=True)
-        sleep(1)
-        if self._sp.process.is_alive():
-            print("Bridge Running")
-        else:
-            print(self._sp.stderr)
+    if _ENABLE_START_BRIDGE:
+        def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
+            self.stop_bridge()
+            if token is None:
+                token = self._token
+            self._sp = wampify(self._connection_file, "--wamp-url", wamp_url, "--token", token, _bg=True)
+            sleep(1)
+            if self._sp.process.is_alive():
+                print("Bridge Running")
+            else:
+                print(self._sp.stderr)
 
-    def stop_bridge(self, **kwargs):
-        try:
-            self._sp.process.terminate()
-            print("WAMP bridge exposure process terminated successfully")
-        except AttributeError as ae:
-            pass
-        self._sp = None
+        def stop_bridge(self, **kwargs):
+            try:
+                self._sp.process.terminate()
+                print("WAMP bridge exposure process terminated successfully")
+            except AttributeError as ae:
+                pass
+            self._sp = None
+
+    else:
+        def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
+            raise NotImplementedError("starting/stopping bridge via magic not supported in your environment")
+
+        def stop_bridge(self, **kwargs):
+            raise NotImplementedError("starting/stopping bridge via magic not supported in your environment")
 
     @inlineCallbacks
     def list(self, raw=False, **kwargs):
