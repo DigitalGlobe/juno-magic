@@ -203,8 +203,8 @@ def build_bridge_class(client):
                 self.machine_connection.shutdown()
             except AttributeError:
                 pass
-            #finally:
-                #self.proxy_machine_channel()
+            finally:
+                self.proxy_machine_channel()
 
             log.msg("[onJoin] ...done.")
             log.msg(client.hb_channel._running)
