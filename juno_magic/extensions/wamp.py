@@ -370,6 +370,7 @@ class JunoMagics(Magics):
     @inlineCallbacks
     def select(self, kernel, **kwargs):
         yield self.connect(self._router_url)
+
         @inlineCallbacks
         def _select(prefix):
             yield self._wamp.reset_prefix()
@@ -382,23 +383,25 @@ class JunoMagics(Magics):
             print("Kernel selected [{}]".format(prefix))
 
         prefix_list = yield self.list(raw=True)
-        is_kernel_key = lambda t: re.match(r'io\.timbr\.kernel\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', t)
-        if not is_kernel_key(kernel):
+
+        if kernel in prefix_list:
+            pass
+        else: #Check if `kernel` is a human-readble kernel name that maps to an online kernel
             prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list, details=True)
             if kernel not in prefix_map:
                 print("Kernel not in prefix map")
-                returnValue(None)
+                returnValue(False)
             else:
                 kernel = prefix_map[kernel]
-        if kernel in prefix_list:
-            if kernel != self._kernel_prefix:
-                yield _select(kernel)
-                if not self._heartbeat.running:
-                    self._heartbeat.start(self._hb_interval)
-            else:
-                print("Kernel already selected")
+
+        if kernel != self._kernel_prefix:
+            yield _select(kernel)
+            if not self._heartbeat.running:
+                self._heartbeat.start(self._hb_interval)
         else:
-            print("Kernel not available")
+            print("Kernel already selected")
+
+        returnValue(True)
 
     @inlineCallbacks
     def subscribe(self, callback, **kwargs):
