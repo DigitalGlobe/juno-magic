@@ -240,12 +240,11 @@ class JunoMagics(Magics):
 
         self._parser = self.generate_parser()
 
-    @inlineCallbacks
     def set_connection(self, wamp_connection):
         log.msg("SET_CONNECTION: {}".format(wamp_connection))
         # Make sure things get cleaned up no matter why the reset happens
         try:
-            yield self._wamp.leave()
+            self._wamp.leave()
             self._wamp_runner.cancel()
             del self._wamp
         except (CancelledError, AttributeError) as e:
