@@ -211,6 +211,7 @@ def build_bridge_class(magics_instance):
 class JunoMagics(Magics):
     def __init__(self, shell):
         super(JunoMagics, self).__init__(shell)
+        log.startLogging(sys.stdout)
         self._router_url = os.environ.get("JUPYTER_WAMP_ROUTER", "wss://juno.timbr.io/wamp/route")
         self._realm = os.environ.get("JUPYTER_WAMP_REALM", "jupyter")
         self._wamp = None
@@ -239,7 +240,8 @@ class JunoMagics(Magics):
             self._wamp.leave()
             self._wamp_runner.cancel()
             del self._wamp
-        except (CancelledError, AttributeError):
+        except (CancelledError, AttributeError) as e:
+            log.msg(e)
             pass
 
         self._wamp = wamp_connection
@@ -300,9 +302,18 @@ class JunoMagics(Magics):
     def token(self, token, **kwargs):
         self._token = token
 
+    def log_status(self):
+        log.msg("  self._wamp: {}".format(self._wamp))
+        log.msg("  self._wamp_runner: {}".format(self._wamp_runner))
+        log.msg("  self._connected: {}".format(self._connected))
+        if self._connected is not None:
+            log.msg("  self._connected state: {}".format(self._connected.called))
+        #
     def connect(self, wamp_url, reconnect=False, **kwargs):
         # NOTE: we would like connect to return immediately if there is an active connection, disconnect and
         # connect if the connection url has changed, or reconnect if the connection has dropped
+        log.msg("connect called: with wamp_url={}".format(wamp_url))
+        self.log_status()
         if (wamp_url != self._router_url) or reconnect:
             self.set_connection(None)
 
@@ -317,6 +328,8 @@ class JunoMagics(Magics):
             log.msg("  Project Realm: {}".format(self._realm))
 
         # Start the connection manager loop
+        log.msg("after connect called")
+        self.log_status()
         return self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
     if _ENABLE_START_BRIDGE:
