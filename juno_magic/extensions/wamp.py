@@ -224,10 +224,12 @@ class JunoMagics(Magics):
         self._hb_interval = 10
         self._heartbeat = LoopingCall(self._ping)
 
-        # set local kernel key
-        with open(self._connection_file) as f:
-            config = json.load(f)
-            self._kernel_key = config["key"]
+        try:        # set local kernel key
+            with open(self._connection_file) as f:
+                config = json.load(f)
+                self._kernel_key = config["key"]
+        except TypeError:
+            self._kernel_key = None
 
         self._parser = self.generate_parser()
 
