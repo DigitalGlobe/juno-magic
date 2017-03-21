@@ -211,6 +211,7 @@ def build_bridge_class(magics_instance):
 class JunoMagics(Magics):
     def __init__(self, shell):
         super(JunoMagics, self).__init__(shell)
+        log.startLogging(sys.stdout)
         self._router_url = os.environ.get("JUPYTER_WAMP_ROUTER", "wss://juno.timbr.io/wamp/route")
         self._realm = os.environ.get("JUPYTER_WAMP_REALM", "jupyter")
         self._wamp = None
