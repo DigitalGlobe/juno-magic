@@ -188,7 +188,7 @@ def build_bridge_class(magics_instance):
                 yield self.set_prefix(magics_instance._kernel_prefix)
                 print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
                 if not magics_instance._heartbeat.running:
-                    magics_instance._heartbeat.start(self._hb_interval, now=False)
+                    magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
             returnValue(None)
 
         @inlineCallbacks
