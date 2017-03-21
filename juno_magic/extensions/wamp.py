@@ -230,7 +230,10 @@ class JunoMagics(Magics):
         self._debug = False
 
         if self._debug:
-            log.startLogging(open('/home/gremlin/wamp.log', 'w'))
+            try:
+                log.startLogging(open('/home/gremlin/wamp.log', 'w'))
+            except IOError:
+                pass
 
         try:        # set local kernel key
             with open(self._connection_file) as f:
