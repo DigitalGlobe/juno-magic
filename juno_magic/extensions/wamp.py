@@ -90,9 +90,11 @@ def on_comm_open(comm, msg):
 def handle_comm_msg(msg):
     content = msg['content']
     comm_id = content['comm_id']
-    get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg(msg['msg_type'],
-        data=content['data'], metadata={"echo": True}, buffers=None
-    )
+    try:
+        get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg(msg['msg_type'],
+            data=content['data'], metadata={"echo": True}, buffers=None)
+    except KeyError: # We may receive a message before comm_open registration due to a race, but the key does get registered. Handling here for now.
+        pass
 
 def build_bridge_class(magics_instance):
     class WampConnectionComponent(ApplicationSession):
@@ -188,14 +190,14 @@ def build_bridge_class(magics_instance):
                 yield self.set_prefix(magics_instance._kernel_prefix)
                 print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
                 if not magics_instance._heartbeat.running:
-                    magics_instance._heartbeat.start(self._hb_interval, now=False)
+                    magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
             returnValue(None)
 
         @inlineCallbacks
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
-            super(self.__class__, self).onLeave(details)
+            yield super(self.__class__, self).onLeave(details)
             magics_instance.set_connection(None)
             log.msg("set magics connection to None")
             returnValue(None)
@@ -205,6 +207,7 @@ def build_bridge_class(magics_instance):
             # next time connect is called
             #magics_instance.set_connection(None)
             pass
+
     return WampConnectionComponent
 
 @magics_class
@@ -224,6 +227,10 @@ class JunoMagics(Magics):
         self._connected = None
         self._hb_interval = 10
         self._heartbeat = LoopingCall(self._ping)
+        self._debug = False
+
+        if self._debug:
+            log.startLogging(open('/home/gremlin/wamp.log', 'w'))
 
         try:        # set local kernel key
             with open(self._connection_file) as f:
@@ -235,12 +242,14 @@ class JunoMagics(Magics):
         self._parser = self.generate_parser()
 
     def set_connection(self, wamp_connection):
+        log.msg("SET_CONNECTION: {}".format(wamp_connection))
         # Make sure things get cleaned up no matter why the reset happens
         try:
             self._wamp.leave()
             self._wamp_runner.cancel()
             del self._wamp
-        except (CancelledError, AttributeError):
+        except (CancelledError, AttributeError) as e:
+            log.msg(e)
             pass
 
         self._wamp = wamp_connection
@@ -301,9 +310,18 @@ class JunoMagics(Magics):
     def token(self, token, **kwargs):
         self._token = token
 
+    def log_status(self):
+        log.msg("    self._wamp: {}".format(self._wamp))
+        log.msg("    self._wamp_runner: {}".format(self._wamp_runner))
+        log.msg("    self._connected: {}".format(self._connected))
+        if self._connected is not None:
+            log.msg("   self._connected state: {}".format(self._connected.called))
+        #
     def connect(self, wamp_url, reconnect=False, **kwargs):
         # NOTE: we would like connect to return immediately if there is an active connection, disconnect and
         # connect if the connection url has changed, or reconnect if the connection has dropped
+        log.msg("CONNECT called: wamp_url={}".format(wamp_url))
+        self.log_status()
         if (wamp_url != self._router_url) or reconnect:
             self.set_connection(None)
 
@@ -318,6 +336,8 @@ class JunoMagics(Magics):
             log.msg("  Project Realm: {}".format(self._realm))
 
         # Start the connection manager loop
+        log.msg("after connect called")
+        self.log_status()
         return self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
     if _ENABLE_START_BRIDGE:
@@ -349,6 +369,7 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def list(self, raw=False, **kwargs):
+        log.msg("LIST called")
         yield self.connect(self._router_url)
         try:
             output = yield self._wamp.call(u"io.timbr.kernel.list")
@@ -372,6 +393,7 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def select(self, kernel, **kwargs):
+        log.msg("SELECT called on {}".format(kernel))
         yield self.connect(self._router_url)
 
         @inlineCallbacks
@@ -426,8 +448,11 @@ class JunoMagics(Magics):
         # if False, it means the remote kernel client has died/is not active
         try:
             res = yield self._wamp.call(".".join([self._kernel_prefix, u"ping"]))
+            log.msg("_pinging: " + ".".join([self._kernel_prefix, "ping"]))
+            log.msg("_pong response: {}".format(res))
             returnValue(res)
         except Exception as e:
+            log.msg("_pong error: {}".format(e))
             self.set_connection(None)
 
     def _get_kernel_names(self, prefix_list, details=False):
