@@ -235,6 +235,7 @@ class JunoMagics(Magics):
         self._parser = self.generate_parser()
 
     def set_connection(self, wamp_connection):
+        log.msg("SET_CONNECTION: {}".format(wamp_connection))
         # Make sure things get cleaned up no matter why the reset happens
         try:
             self._wamp.leave()
@@ -303,16 +304,16 @@ class JunoMagics(Magics):
         self._token = token
 
     def log_status(self):
-        log.msg("  self._wamp: {}".format(self._wamp))
-        log.msg("  self._wamp_runner: {}".format(self._wamp_runner))
-        log.msg("  self._connected: {}".format(self._connected))
+        log.msg("    self._wamp: {}".format(self._wamp))
+        log.msg("    self._wamp_runner: {}".format(self._wamp_runner))
+        log.msg("    self._connected: {}".format(self._connected))
         if self._connected is not None:
-            log.msg("  self._connected state: {}".format(self._connected.called))
+            log.msg("   self._connected state: {}".format(self._connected.called))
         #
     def connect(self, wamp_url, reconnect=False, **kwargs):
         # NOTE: we would like connect to return immediately if there is an active connection, disconnect and
         # connect if the connection url has changed, or reconnect if the connection has dropped
-        log.msg("connect called: with wamp_url={}".format(wamp_url))
+        log.msg("CONNECT called: wamp_url={}".format(wamp_url))
         self.log_status()
         if (wamp_url != self._router_url) or reconnect:
             self.set_connection(None)
@@ -361,6 +362,7 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def list(self, raw=False, **kwargs):
+        log.msg("LIST called")
         yield self.connect(self._router_url)
         try:
             output = yield self._wamp.call(u"io.timbr.kernel.list")
@@ -384,6 +386,7 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def select(self, kernel, **kwargs):
+        log.msg("SELECT called on {}".format(kernel))
         yield self.connect(self._router_url)
 
         @inlineCallbacks
@@ -438,8 +441,11 @@ class JunoMagics(Magics):
         # if False, it means the remote kernel client has died/is not active
         try:
             res = yield self._wamp.call(".".join([self._kernel_prefix, u"ping"]))
+            log.msg("_pinging: " + ".".join([self._kernel_prefix, "ping"]))
+            log.msg("_pong response: {}".format(res))
             returnValue(res)
         except Exception as e:
+            log.msg("_pong error: {}".format(e))
             self.set_connection(None)
 
     def _get_kernel_names(self, prefix_list, details=False):
