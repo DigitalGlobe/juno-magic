@@ -90,9 +90,11 @@ def on_comm_open(comm, msg):
 def handle_comm_msg(msg):
     content = msg['content']
     comm_id = content['comm_id']
-    get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg(msg['msg_type'],
-        data=content['data'], metadata={"echo": True}, buffers=None
-    )
+    try:
+        get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg(msg['msg_type'],
+            data=content['data'], metadata={"echo": True}, buffers=None)
+    except KeyError: # We may receive a message before comm_open registration due to a race, but the key does get registered. Handling here for now.
+        pass
 
 def build_bridge_class(magics_instance):
     class WampConnectionComponent(ApplicationSession):
@@ -212,7 +214,6 @@ def build_bridge_class(magics_instance):
 class JunoMagics(Magics):
     def __init__(self, shell):
         super(JunoMagics, self).__init__(shell)
-        log.startLogging(open('/home/gremlin/wamp.log', 'w'))
         self._router_url = os.environ.get("JUPYTER_WAMP_ROUTER", "wss://juno.timbr.io/wamp/route")
         self._realm = os.environ.get("JUPYTER_WAMP_REALM", "jupyter")
         self._wamp = None
@@ -225,6 +226,10 @@ class JunoMagics(Magics):
         self._connected = None
         self._hb_interval = 10
         self._heartbeat = LoopingCall(self._ping)
+        self._debug = False
+
+        if self._debug:
+            log.startLogging(open('/home/gremlin/wamp.log', 'w'))
 
         try:        # set local kernel key
             with open(self._connection_file) as f:
