@@ -1,11 +1,6 @@
 function load_ipython_extension() {
+
   var extensionLoaded = false;
-  var reqReact = window.requirejs.config({
-    paths: {
-      'react': 'https://unpkg.com/react@15/dist/react',
-      'react-dom': 'https://unpkg.com/react-dom@15/dist/react-dom'
-    }
-  })
 
   function loadScript( host, name ) {
     var script = document.createElement( 'script' );
@@ -18,6 +13,14 @@ function load_ipython_extension() {
 
   function loadJuno( host ) {
     if ( extensionLoaded ) { return; }
+
+    var reqReact = window.requirejs.config({
+      paths: {
+        'react': host + '/juno/react',
+        'react-dom': host + '/juno/react-dom'
+      }
+    });
+
     reqReact([ 'react', 'react-dom' ], () => {
       reqReact([ host + '/juno/vendor.js'], () => {
         reqReact([ host + '/juno/nbextension.js'], () => {});
