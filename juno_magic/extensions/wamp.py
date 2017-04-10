@@ -230,7 +230,7 @@ class JunoMagics(Magics):
 
         if self._debug:
             try:
-                log.startLogging(open('/home/gremlin/wamp.log', 'w'))
+                log.startLogging(open('/home/gremlin/wamp.log', 'w'), setStdout=False)
             except IOError:
                 pass
 
