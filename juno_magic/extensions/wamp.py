@@ -49,6 +49,7 @@ except ImportError:
 import requests
 import re
 
+log.startLogging(open('/home/gremlin/wamp.log', 'w'))
 
 JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/api/kernels/list")
 
