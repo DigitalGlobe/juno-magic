@@ -226,7 +226,7 @@ class JunoMagics(Magics):
         self._connected = None
         self._hb_interval = 10
         self._heartbeat = LoopingCall(self._ping)
-        self._debug = False
+        self._debug = True
 
         if self._debug:
             try:
