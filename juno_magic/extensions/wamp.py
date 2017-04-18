@@ -331,7 +331,7 @@ class JunoMagics(Magics):
             self._connected = Deferred() # allocate a new deferred
             self._router_url = wamp_url
             _wamp_application_runner = JunoRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
-            self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
+            self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False, log_level='debug') # -> returns a deferred
             log.msg("Connecting to router: {}".format(self._router_url))
             log.msg("  Project Realm: {}".format(self._realm))
 
