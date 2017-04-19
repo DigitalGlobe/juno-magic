@@ -18,7 +18,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue, CancelledError,
 from twisted.internet.task import LoopingCall
 from twisted.internet.error import ConnectionRefusedError
 from autobahn.twisted.util import sleep
-from autobahn.twisted.wamp import ApplicationSession, Service
+from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner, Service
 from autobahn import wamp
 from autobahn.wamp.exception import ApplicationError
 
@@ -36,7 +36,6 @@ except ImportError:
 if sys.version.startswith("3"):
     unicode = str
 
-from .runner import JunoRunner
 
 _zmq_factory = ZmqFactory()
 
@@ -246,7 +245,7 @@ def main():
     client.load_connection_file()
     client.start_channels()
 
-    _bridge_runner = JunoRunner(url=unicode(args.wamp_url), realm=unicode(args.wamp_realm),
+    _bridge_runner = ApplicationRunner(url=unicode(args.wamp_url), realm=unicode(args.wamp_realm),
                                 headers={"Authorization": "Bearer {}".format(args.token),
                                          "X-Kernel-ID": client.session.key})
 
