@@ -31,6 +31,7 @@ from twisted.internet import reactor, threads
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
+from autobahn.twisted.websocket import WampWebSocketClientProtocol
 from autobahn import wamp
 from autobahn.wamp.exception import ApplicationError, TransportLost
 from autobahn.websocket.util import parse_url
@@ -209,6 +210,7 @@ def build_bridge_class(magics_instance):
 
     return WampConnectionComponent
 
+
 @magics_class
 class JunoMagics(Magics):
     def __init__(self, shell):
@@ -226,6 +228,7 @@ class JunoMagics(Magics):
         self._hb_interval = 10
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
+        self._errors = []
 
         if self._debug:
             try:
@@ -241,6 +244,13 @@ class JunoMagics(Magics):
             self._kernel_key = None
 
         self._parser = self.generate_parser()
+
+    def connection_callback(self, session):
+        if isinstance(session.result, WampWebSocketClientProtocol):
+            return True
+        else:
+            self._errors.append(session.result)
+            return False
 
     def set_connection(self, wamp_connection):
         log.msg("SET_CONNECTION: {}".format(wamp_connection))
@@ -330,6 +340,7 @@ class JunoMagics(Magics):
             # NOTE: this means we have dropped the connection (ie onDisconnect has been called), so we'll make
             # a new one.
             self._connected = Deferred() # allocate a new deferred
+            self._connected.addCallback(self.connection_callback)
             self._router_url = wamp_url
             _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
             self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
