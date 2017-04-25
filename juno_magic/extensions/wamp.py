@@ -249,7 +249,7 @@ class JunoMagics(Magics):
         if isinstance(result, WampWebSocketClientProtocol):
             return True
         else:
-            self._errors.append(session.result)
+            self._errors.append(result)
             return False
 
     def on_connection_error(self, err):
