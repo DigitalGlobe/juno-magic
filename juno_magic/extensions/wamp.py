@@ -265,7 +265,7 @@ class JunoMagics(Magics):
 
         self._wamp = wamp_connection
         if wamp_connection is not None:
-            self._connected.callback(wamp_connection)
+            self._connected.callback(self._wamp_runner)
         else:
             if self._heartbeat.running:
                 self._heartbeat.stop()
