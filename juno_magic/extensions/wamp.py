@@ -245,12 +245,16 @@ class JunoMagics(Magics):
 
         self._parser = self.generate_parser()
 
-    def connection_callback(self, session):
-        if isinstance(session.result, WampWebSocketClientProtocol):
+    def on_connection_success(self, result):
+        if isinstance(result, WampWebSocketClientProtocol):
             return True
         else:
             self._errors.append(session.result)
             return False
+
+    def on_connection_error(self, err):
+        self._errors.append(err)
+        return False
 
     def set_connection(self, wamp_connection):
         log.msg("SET_CONNECTION: {}".format(wamp_connection))
@@ -265,7 +269,7 @@ class JunoMagics(Magics):
 
         self._wamp = wamp_connection
         if wamp_connection is not None:
-            self._connected.callback(self._wamp_runner)
+            self._connected.callback(wamp_connection)
         else:
             if self._heartbeat.running:
                 self._heartbeat.stop()
@@ -340,10 +344,11 @@ class JunoMagics(Magics):
             # NOTE: this means we have dropped the connection (ie onDisconnect has been called), so we'll make
             # a new one.
             self._connected = Deferred() # allocate a new deferred
-            self._connected.addCallback(self.connection_callback)
             self._router_url = wamp_url
             _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
             self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
+            self._wamp_runner.addCallback(self.on_connection_success)
+            self._wamp_runner.addErrback(self.on_connection_error)
             log.msg("Connecting to router: {}".format(self._router_url))
             log.msg("  Project Realm: {}".format(self._realm))
 
