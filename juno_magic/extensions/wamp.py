@@ -211,6 +211,12 @@ def build_bridge_class(magics_instance):
     return WampConnectionComponent
 
 
+class ErrorCollector(object):
+    exception = None
+
+    def __call__(self, failure):
+        self.exception = failure
+
 @magics_class
 class JunoMagics(Magics):
     def __init__(self, shell):
@@ -229,6 +235,7 @@ class JunoMagics(Magics):
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
         self._errors = []
+        self._connect_error = ErrorCollector()
 
         if self._debug:
             try:
@@ -348,13 +355,19 @@ class JunoMagics(Magics):
             _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
             self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
             self._wamp_runner.addCallback(self.on_connection_success)
-            self._wamp_runner.addErrback(self.on_connection_error)
+            self._wamp_runner.addErrback(self._connect_error)
             log.msg("Connecting to router: {}".format(self._router_url))
             log.msg("  Project Realm: {}".format(self._realm))
 
         # Start the connection manager loop
         log.msg("after connect called")
         self.log_status()
+
+        if self._connect_error.exception:
+            self._error.append(self._connect_error.exception)
+            self._connect_error.exception = None
+            # raise self._connect_error.exception
+
         return self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
     if _ENABLE_START_BRIDGE:
