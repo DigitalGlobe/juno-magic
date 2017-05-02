@@ -213,9 +213,12 @@ def build_bridge_class(magics_instance):
 
 class ErrorCollector(object):
     exception = None
+    def __init__(self, magic):
+        self.magic = magic
 
     def __call__(self, failure):
         self.exception = failure
+        self.magic._errors.append(failure)
 
 @magics_class
 class JunoMagics(Magics):
@@ -235,7 +238,7 @@ class JunoMagics(Magics):
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
         self._errors = []
-        self._connect_error = ErrorCollector()
+        self._connect_error = ErrorCollector(self)
 
         if self._debug:
             try:
@@ -354,7 +357,7 @@ class JunoMagics(Magics):
             self._router_url = wamp_url
             _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
             self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
-            self._wamp_runner.addCallback(self.on_connection_success)
+            #self._wamp_runner.addCallback(self.on_connection_success)
             self._wamp_runner.addErrback(self._connect_error)
             log.msg("Connecting to router: {}".format(self._router_url))
             log.msg("  Project Realm: {}".format(self._realm))
@@ -364,7 +367,7 @@ class JunoMagics(Magics):
         self.log_status()
 
         if self._connect_error.exception:
-            self._error.append(self._connect_error.exception)
+            #self._error.append(self._connect_error.exception)
             self._connect_error.exception = None
             # raise self._connect_error.exception
 
