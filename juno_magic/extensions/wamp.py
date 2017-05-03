@@ -49,6 +49,7 @@ except ImportError:
 import requests
 import re
 
+from juno_magic.exception import *
 
 JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/api/kernels/list")
 
@@ -182,7 +183,7 @@ def build_bridge_class(magics_instance):
             yield self.register(self)
             log.msg("[onJoin] ...done.")
             log.msg("[onJoin] Checking in with Magics class")
-            magics_instance.set_connection(self)
+            yield magics_instance.set_connection(self)
             log.msg("[onJoin] ...done.")
             print("Successfully connected to {}".format(magics_instance._router_url))
             if magics_instance._kernel_prefix:
@@ -198,7 +199,7 @@ def build_bridge_class(magics_instance):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
             yield super(self.__class__, self).onLeave(details)
-            magics_instance.set_connection(None)
+            yield magics_instance.set_connection(None)
             log.msg("set magics connection to None")
             returnValue(None)
 
@@ -218,7 +219,31 @@ class ErrorCollector(object):
 
     def __call__(self, failure):
         self.exception = failure
-        self.magic._errors.append(failure)
+        if failure:
+            self.magic._errors.append(failure)
+
+def cleanup(proto):
+    if hasattr(proto, '_session') and proto._session is not None:
+        if proto._session.is_attached():
+            return proto._session.leave()
+        elif proto._session.is_connected():
+            return proto._session.disconnect()
+
+def connection_report(proto):
+    if proto is not None and not proto.wasClean:
+        if proto.wasCloseHandshakeTimeout:
+            return CloseHandshakeError(proto.wasNotCleanReason)
+        elif proto.wasMaxFramePayloadSizeExceeded:
+            return MaxFramePayloadSizeExceededError(proto.wasNotCleanReason)
+        elif proto.wasMaxMessagePayloadSizeExceeded:
+            return MaxMessagePayloadSizeExceededError(proto.wasNotCleanReason)
+        elif proto.wasOpenHandshakeTimeout:
+            return OpenHandshakeTimeoutError(proto.wasNotCleanReason)
+        elif proto.wasServerConnectionDropTimeout:
+            return ServerConnectionDropTimeout(proto.wasNotCleanReason)
+        elif proto.wasServingFlashSocketPolicyFile:
+            return ServingFlashSocketPolicyFileError(proto.wasNotCleanReason)
+        return None
 
 @magics_class
 class JunoMagics(Magics):
@@ -255,27 +280,13 @@ class JunoMagics(Magics):
 
         self._parser = self.generate_parser()
 
-    def on_connection_success(self, result):
-        if isinstance(result, WampWebSocketClientProtocol):
-            return result
-        else:
-            self._errors.append(result)
-            return result
-
-    def on_connection_error(self, err):
-        self._errors.append(["from on_conn_err", err])
-        return result
-
+    @inlineCallbacks
     def set_connection(self, wamp_connection):
         log.msg("SET_CONNECTION: {}".format(wamp_connection))
         # Make sure things get cleaned up no matter why the reset happens
-        try:
-            self._wamp.leave()
-            self._wamp_runner.cancel()
-            del self._wamp
-        except (CancelledError, AttributeError) as e:
-            log.msg(e)
-            pass
+        yield cleanup(self._wamp)
+        e = connection_report(self._wamp)
+        self._connect_error(e)
 
         self._wamp = wamp_connection
         if wamp_connection is not None:
@@ -341,14 +352,15 @@ class JunoMagics(Magics):
         log.msg("    self._connected: {}".format(self._connected))
         if self._connected is not None:
             log.msg("   self._connected state: {}".format(self._connected.called))
-        #
+
+    @inlineCallbacks
     def connect(self, wamp_url, reconnect=False, **kwargs):
         # NOTE: we would like connect to return immediately if there is an active connection, disconnect and
         # connect if the connection url has changed, or reconnect if the connection has dropped
         log.msg("CONNECT called: wamp_url={}".format(wamp_url))
         self.log_status()
         if (wamp_url != self._router_url) or reconnect:
-            self.set_connection(None)
+            yield self.set_connection(None)
 
         if self._wamp is None:
             # NOTE: this means we have dropped the connection (ie onDisconnect has been called), so we'll make
@@ -371,7 +383,7 @@ class JunoMagics(Magics):
             self._connect_error.exception = None
             # raise self._connect_error.exception
 
-        return self._connected # either the new or the old deferred, depending on if we have reconnected or not
+        yield self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
     if _ENABLE_START_BRIDGE:
         def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
@@ -486,7 +498,7 @@ class JunoMagics(Magics):
             returnValue(res)
         except Exception as e:
             log.msg("_pong error: {}".format(e))
-            self.set_connection(None)
+            yield self.set_connection(None)
 
     def _get_kernel_names(self, prefix_list, details=False):
         headers = {"Authorization": "Bearer {}".format(self._token)}
