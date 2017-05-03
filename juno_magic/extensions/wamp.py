@@ -383,7 +383,7 @@ class JunoMagics(Magics):
             self._connect_error.exception = None
             # raise self._connect_error.exception
 
-        yield self._connected # either the new or the old deferred, depending on if we have reconnected or not
+        returnValue(self._connected) # either the new or the old deferred, depending on if we have reconnected or not
 
     if _ENABLE_START_BRIDGE:
         def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
