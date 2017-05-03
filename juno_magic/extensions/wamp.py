@@ -378,12 +378,12 @@ class JunoMagics(Magics):
         log.msg("after connect called")
         self.log_status()
 
-        if self._connect_error.exception:
+        #if self._connect_error.exception:
             #self._error.append(self._connect_error.exception)
-            self._connect_error.exception = None
+            #self._connect_error.exception = None
             # raise self._connect_error.exception
 
-        returnValue(self._connected) # either the new or the old deferred, depending on if we have reconnected or not
+        yield self._connected # either the new or the old deferred, depending on if we have reconnected or not
 
     if _ENABLE_START_BRIDGE:
         def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
