@@ -285,7 +285,7 @@ class JunoMagics(Magics):
         log.msg("SET_CONNECTION: {}".format(wamp_connection))
         # Make sure things get cleaned up no matter why the reset happens
         yield cleanup(self._wamp)
-        e = connection_report(self._wamp)
+        e = connection_report(self._wamp_runner)
         self._connect_error(e)
 
         self._wamp = wamp_connection
