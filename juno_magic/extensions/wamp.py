@@ -199,7 +199,7 @@ def build_bridge_class(magics_instance):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
             yield super(self.__class__, self).onLeave(details)
-            yield magics_instance.set_connection(None)
+            yield magics_instance.set_connection(None, do_cleanup=False)
             log.msg("set magics connection to None")
             returnValue(None)
 
@@ -229,7 +229,7 @@ def cleanup(proto):
         elif proto._session.is_connected():
             return proto._session.disconnect()
 
-def connection_report(proto):
+def get_connection_error(proto):
     if proto is not None and not proto.wasClean:
         if proto.wasCloseHandshakeTimeout:
             return CloseHandshakeError(proto.wasNotCleanReason)
@@ -263,7 +263,7 @@ class JunoMagics(Magics):
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
         self._errors = []
-        self._connect_error = ErrorCollector(self)
+        self._wamp_err_handler = ErrorCollector(self)
 
         if self._debug:
             try:
@@ -280,20 +280,32 @@ class JunoMagics(Magics):
 
         self._parser = self.generate_parser()
 
-    @inlineCallbacks
-    def set_connection(self, wamp_connection):
-        log.msg("SET_CONNECTION: {}".format(wamp_connection))
-        # Make sure things get cleaned up no matter why the reset happens
-        yield cleanup(self._wamp_runner)
-        e = connection_report(self._wamp_runner)
-        self._connect_error(e)
+    if _ENABLE_START_BRIDGE:
+        def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
+            self.stop_bridge()
+            if token is None:
+                token = self._token
+            self._sp = wampify(self._connection_file, "--wamp-url", wamp_url, "--token", token, _bg=True)
+            sleep(1)
+            if self._sp.process.is_alive():
+                print("Bridge Running")
+            else:
+                print(self._sp.stderr)
 
-        self._wamp = wamp_connection
-        if wamp_connection is not None:
-            self._connected.callback(wamp_connection)
-        else:
-            if self._heartbeat.running:
-                self._heartbeat.stop()
+        def stop_bridge(self, **kwargs):
+            try:
+                self._sp.process.terminate()
+                print("WAMP bridge exposure process terminated successfully")
+            except AttributeError as ae:
+                pass
+            self._sp = None
+
+    else:
+        def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
+            raise NotImplementedError("starting/stopping bridge via magic not supported in your environment")
+
+        def stop_bridge(self, **kwargs):
+            raise NotImplementedError("starting/stopping bridge via magic not supported in your environment")
 
     def generate_parser(self):
         parser = argparse.ArgumentParser(prog="juno")
@@ -353,18 +365,62 @@ class JunoMagics(Magics):
         if self._connected is not None:
             log.msg("   self._connected state: {}".format(self._connected.called))
 
+    @property
+    def _has_protocol(self):
+        if isinstance(self._wamp_runner, WampWebSocketClientProtocol):
+            return True
+        return False
+
+    @property
+    def _connection_dead(self):
+        if self._has_protocol:
+            if self._wamp_runner.state == self._wamp_runner.STATE_CLOSED:
+                return True
+        return False
+
+    @property
+    def _connection_active(self):
+        if self._has_protocol:
+            return not self._connection_dead
+        return False
+
+    @property
+    def _ready_to_connect(self):
+        return not self._has_proto
+
+    @property
+    def connected(self):
+        if self._has_protocol:
+            if self._wamp_runner.isOpen():
+                return True
+        return False
+
+   @inlineCallbacks
+    def set_connection(self, wamp_connection, do_cleanup=True):
+        log.msg("SET_CONNECTION: {}".format(wamp_connection))
+
+        if wamp_connection is None: # On a reset, try to cleanup the previous connection and handle any errors
+            if do_cleanup:
+                yield cleanup(self._wamp_runner)
+                e = get_connection_error(self._wamp_runner)
+                self._wamp_err_handler(e)
+            if self._heartbeat.running:
+                self._hearbeat.stop()
+        else:
+            self._connected.callback(wamp_connection)
+
+        self._wamp = wamp_connection
+
     @inlineCallbacks
     def connect(self, wamp_url, reconnect=False, **kwargs):
         # NOTE: we would like connect to return immediately if there is an active connection, disconnect and
         # connect if the connection url has changed, or reconnect if the connection has dropped
         log.msg("CONNECT called: wamp_url={}".format(wamp_url))
         self.log_status()
-        if (wamp_url != self._router_url) or reconnect:
+        if (wamp_url != self._router_url) or reconnect or self._connection_dead:
             yield self.set_connection(None)
 
-        if self._wamp is None:
-            # NOTE: this means we have dropped the connection (ie onDisconnect has been called), so we'll make
-            # a new one.
+        if self._ready_to_connect:
             self._connected = Deferred() # allocate a new deferred
             self._router_url = wamp_url
             _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
@@ -372,49 +428,17 @@ class JunoMagics(Magics):
                 self._wamp_runner = yield _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
             except Exception as e:
             #self._wamp_runner.addCallback(self.on_connection_success)
-                self._connect_error(e)
+                self._wamp_err_handler(e)
                 self.set_connection(None)
-
-            log.msg("Connecting to router: {}".format(self._router_url))
-            log.msg("  Project Realm: {}".format(self._realm))
+            else:
+                log.msg("Connecting to router: {}".format(self._router_url))
+                log.msg("  Project Realm: {}".format(self._realm))
 
         # Start the connection manager loop
         log.msg("after connect called")
         self.log_status()
 
-        #if self._connect_error.exception:
-            #self._error.append(self._connect_error.exception)
-            #self._connect_error.exception = None
-            # raise self._connect_error.exception
-
         yield self._connected # either the new or the old deferred, depending on if we have reconnected or not
-
-    if _ENABLE_START_BRIDGE:
-        def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
-            self.stop_bridge()
-            if token is None:
-                token = self._token
-            self._sp = wampify(self._connection_file, "--wamp-url", wamp_url, "--token", token, _bg=True)
-            sleep(1)
-            if self._sp.process.is_alive():
-                print("Bridge Running")
-            else:
-                print(self._sp.stderr)
-
-        def stop_bridge(self, **kwargs):
-            try:
-                self._sp.process.terminate()
-                print("WAMP bridge exposure process terminated successfully")
-            except AttributeError as ae:
-                pass
-            self._sp = None
-
-    else:
-        def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
-            raise NotImplementedError("starting/stopping bridge via magic not supported in your environment")
-
-        def stop_bridge(self, **kwargs):
-            raise NotImplementedError("starting/stopping bridge via magic not supported in your environment")
 
     @inlineCallbacks
     def list(self, raw=False, **kwargs):
