@@ -438,7 +438,8 @@ class JunoMagics(Magics):
         log.msg("after connect called")
         self.log_status()
 
-        yield self._connected # either the new or the old deferred, depending on if we have reconnected or not
+        res = yield self._connected # either the new or the old deferred, depending on if we have reconnected or not
+        returnValue(res)
 
     @inlineCallbacks
     def list(self, raw=False, **kwargs):
