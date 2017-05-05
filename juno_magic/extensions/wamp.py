@@ -395,7 +395,7 @@ class JunoMagics(Magics):
                 return True
         return False
 
-   @inlineCallbacks
+    @inlineCallbacks
     def set_connection(self, wamp_connection, do_cleanup=True):
         log.msg("SET_CONNECTION: {}".format(wamp_connection))
 
