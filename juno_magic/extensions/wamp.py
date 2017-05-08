@@ -212,15 +212,29 @@ def build_bridge_class(magics_instance):
     return WampConnectionComponent
 
 
-class ErrorCollector(object):
+class WampErrorDispatcher(Component):
     exception = None
-    def __init__(self, magic):
+    def __init__(self, magic, module='timbr.machine', **kwargs):
         self.magic = magic
+        self._module = module
+        super(WampErrorDispatcher, self).__init__(target_name=module,  **kwargs)
 
     def __call__(self, failure):
         self.exception = failure
         if failure:
             self.magic._errors.append(failure)
+            self._format_msg(failure)
+
+    def _handle_msg(self, msg):
+        if isinstance(msg, Exception):
+            msg = self._format_msg(msg)
+        elif isinstance(msg, CloseDetails):
+           pass
+
+    def _format_msg(self, e):
+        msg = {"exception": str(e)}
+        return msg
+
 
 def cleanup(proto):
     if hasattr(proto, '_session') and proto._session is not None:
@@ -245,6 +259,12 @@ def get_connection_error(proto):
             return ServingFlashSocketPolicyFileError(proto.wasNotCleanReason)
         return None
 
+def format_disconnection_msg(proto):
+    msg = {"closed_by_me": proto.closedByMe,
+           "dropped_by_me": proto.droppedByMe,
+           "failed_by_me": proto.failedByMe,
+           }
+
 @magics_class
 class JunoMagics(Magics):
     def __init__(self, shell):
@@ -263,7 +283,7 @@ class JunoMagics(Magics):
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
         self._errors = []
-        self._wamp_err_handler = ErrorCollector(self)
+        self._wamp_err_handler = WampErrorDispatcher(self)
 
         if self._debug:
             try:
@@ -395,6 +415,10 @@ class JunoMagics(Magics):
                 return True
         return False
 
+    def status(self):
+        s = {"wamp": {"status": {}, "config": {}}}
+
+
     @inlineCallbacks
     def set_connection(self, wamp_connection, do_cleanup=True):
         log.msg("SET_CONNECTION: {}".format(wamp_connection))
@@ -408,7 +432,7 @@ class JunoMagics(Magics):
                 self._heartbeat.stop()
             self._wamp = wamp_connection
         else:
-            self._wamp = wamp_connection # Make this assignment before the callback
+            self._wamp = wamp_connection # Make this assignment before making the callback
             self._connected.callback(wamp_connection)
 
     @inlineCallbacks
@@ -427,14 +451,12 @@ class JunoMagics(Magics):
             try:
                 self._wamp_runner = yield _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
             except Exception as e:
-            #self._wamp_runner.addCallback(self.on_connection_success)
                 self._wamp_err_handler(e)
                 self.set_connection(None)
             else:
                 log.msg("Connecting to router: {}".format(self._router_url))
                 log.msg("  Project Realm: {}".format(self._realm))
 
-        # Start the connection manager loop
         log.msg("after connect called")
         self.log_status()
 
