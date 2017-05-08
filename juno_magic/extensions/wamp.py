@@ -405,7 +405,7 @@ class JunoMagics(Magics):
                 e = get_connection_error(self._wamp_runner)
                 self._wamp_err_handler(e)
             if self._heartbeat.running:
-                self._hearbeat.stop()
+                self._heartbeat.stop()
             self._wamp = wamp_connection
         else:
             self._wamp = wamp_connection # Make this assignment before the callback
