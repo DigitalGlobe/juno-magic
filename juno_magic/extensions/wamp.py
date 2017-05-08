@@ -406,10 +406,10 @@ class JunoMagics(Magics):
                 self._wamp_err_handler(e)
             if self._heartbeat.running:
                 self._hearbeat.stop()
+            self._wamp = wamp_connection
         else:
+            self._wamp = wamp_connection # Make this assignment before the callback
             self._connected.callback(wamp_connection)
-
-        self._wamp = wamp_connection
 
     @inlineCallbacks
     def connect(self, wamp_url, reconnect=False, **kwargs):
@@ -483,9 +483,7 @@ class JunoMagics(Magics):
 
         prefix_list = yield self.list(raw=True)
 
-        if kernel in prefix_list:
-            pass
-        else: #Check if `kernel` is a human-readble kernel name that maps to an online kernel
+        if kernel not in prefix_list:
             prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list, details=True)
             if kernel not in prefix_map:
                 print("Kernel not in prefix map")
