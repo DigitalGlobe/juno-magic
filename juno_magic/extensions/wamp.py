@@ -386,7 +386,7 @@ class JunoMagics(Magics):
 
     @property
     def _ready_to_connect(self):
-        return not self._has_protocol
+        return not self._connection_active
 
     @property
     def connected(self):
