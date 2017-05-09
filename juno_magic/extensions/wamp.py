@@ -233,8 +233,8 @@ class WampErrorDispatcher(Component):
         m = {'class': msg.__class__}
         m.update(self.magic.config)
         m['details'] = str(msg)
-            if self.magic._has_proto:
-                m.update(get_session_info(self.magic._wamp_runner))
+        if self.magic._has_proto:
+            m.update(get_session_info(self.magic._wamp_runner))
         return m
 
 def cleanup(proto):
