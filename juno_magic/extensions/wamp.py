@@ -233,7 +233,7 @@ class WampErrorDispatcher(Component):
         m = {'class': msg.__class__}
         m.update(self.magic.wamp_config)
         m['details'] = str(msg)
-        if self.magic._has_proto:
+        if self.magic._has_protocol:
             m.update(get_session_info(self.magic._wamp_runner))
         return m
 
