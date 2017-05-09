@@ -258,7 +258,7 @@ def get_connection_error(proto):
             return ServerConnectionDropTimeout(proto.wasNotCleanReason)
         elif proto.wasServingFlashSocketPolicyFile:
             return ServingFlashSocketPolicyFileError(proto.wasNotCleanReason)
-        return ConnectionError(proto.wasNotCleanReason)
+        return ConnectionLost(proto.wasNotCleanReason)
 
 def get_session_info(proto):
     msg = {"session_info": {"was_clean": proto.wasClean,
