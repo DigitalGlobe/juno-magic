@@ -230,7 +230,7 @@ class WampErrorDispatcher(Component):
             self.send(msg)
 
     def _format_msg(self, msg):
-        m = {'class': msg.__class__}
+        m = {'class': str(msg.__class__)}
         m.update(self.magic.wamp_config)
         m['details'] = str(msg)
         if self.magic._has_protocol:
