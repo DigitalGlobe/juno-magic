@@ -224,7 +224,7 @@ class WampErrorDispatcher(Component):
 
     def __call__(self, failure):
         self.exception = failure
-        if failure:
+        if failure is not None:
             self.magic._errors.append(failure)
             msg = self._format_msg(failure)
             self.send(msg)
@@ -259,6 +259,7 @@ def get_connection_error(proto):
         elif proto.wasServingFlashSocketPolicyFile:
             return ServingFlashSocketPolicyFileError(proto.wasNotCleanReason)
         return ConnectionLost(proto.wasNotCleanReason)
+    return None
 
 def get_session_info(proto):
     msg = {"session_info": {"was_clean": proto.wasClean,
