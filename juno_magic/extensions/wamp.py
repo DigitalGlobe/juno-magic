@@ -231,7 +231,7 @@ class WampErrorDispatcher(Component):
 
     def _format_msg(self, msg):
         m = {'class': msg.__class__}
-        m.update(self.magic.config)
+        m.update(self.magic.wamp_config)
         m['details'] = str(msg)
         if self.magic._has_proto:
             m.update(get_session_info(self.magic._wamp_runner))
@@ -421,7 +421,7 @@ class JunoMagics(Magics):
         return False
 
     @property
-    def config(self):
+    def wamp_config(self):
         s = {"wamp_config": {"router_url": self._router_url}}
         return s
 
