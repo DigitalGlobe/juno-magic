@@ -6,3 +6,4 @@ pyopenssl
 service_identity
 zope.interface
 requests
+jupyter_react
