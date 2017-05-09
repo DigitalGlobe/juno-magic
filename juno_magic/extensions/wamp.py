@@ -32,6 +32,7 @@ from twisted.internet.task import LoopingCall
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 from autobahn.twisted.websocket import WampWebSocketClientProtocol
+from twisted.internet.error import ConnectError, ConnectionLost
 from autobahn import wamp
 from autobahn.wamp.exception import ApplicationError, TransportLost
 from autobahn.websocket.util import parse_url
@@ -50,6 +51,8 @@ import requests
 import re
 
 from juno_magic.exception import *
+
+from jupyter_react import Component
 
 JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/api/kernels/list")
 
@@ -198,7 +201,7 @@ def build_bridge_class(magics_instance):
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
-            yield super(self.__class__, self).onLeave(details)
+            magics_instance._wamp_error_handler(details)
             yield magics_instance.set_connection(None, do_cleanup=False)
             log.msg("set magics connection to None")
             returnValue(None)
@@ -223,18 +226,16 @@ class WampErrorDispatcher(Component):
         self.exception = failure
         if failure:
             self.magic._errors.append(failure)
-            self._format_msg(failure)
+            msg = self._format_msg(failure)
+            self.send(msg)
 
-    def _handle_msg(self, msg):
-        if isinstance(msg, Exception):
-            msg = self._format_msg(msg)
-        elif isinstance(msg, CloseDetails):
-           pass
-
-    def _format_msg(self, e):
-        msg = {"exception": str(e)}
-        return msg
-
+    def _format_msg(self, msg):
+        m = {'class': msg.__class__}
+        m.update(self.magic.config)
+        m['details'] = str(msg)
+            if self.magic._has_proto:
+                m.update(get_session_info(self.magic._wamp_runner))
+        return m
 
 def cleanup(proto):
     if hasattr(proto, '_session') and proto._session is not None:
@@ -257,13 +258,17 @@ def get_connection_error(proto):
             return ServerConnectionDropTimeout(proto.wasNotCleanReason)
         elif proto.wasServingFlashSocketPolicyFile:
             return ServingFlashSocketPolicyFileError(proto.wasNotCleanReason)
-        return None
+        return ConnectionError(proto.wasNotCleanReason)
 
-def format_disconnection_msg(proto):
-    msg = {"closed_by_me": proto.closedByMe,
-           "dropped_by_me": proto.droppedByMe,
-           "failed_by_me": proto.failedByMe,
+def get_session_info(proto):
+    msg = {"session_info": {"was_clean": proto.wasClean,
+                            "reason_not_clean": proto.wasNotCleanReason,
+                            "closed_by_me": proto.closedByMe,
+                            "dropped_by_me": proto.droppedByMe,
+                            "failed_by_me": proto.failedByMe}
            }
+    return msg
+
 
 @magics_class
 class JunoMagics(Magics):
@@ -415,9 +420,10 @@ class JunoMagics(Magics):
                 return True
         return False
 
-    def status(self):
-        s = {"wamp": {"status": {}, "config": {}}}
-
+    @property
+    def config(self):
+        s = {"wamp_config": {"router_url": self._router_url}}
+        return s
 
     @inlineCallbacks
     def set_connection(self, wamp_connection, do_cleanup=True):
@@ -504,8 +510,9 @@ class JunoMagics(Magics):
             print("Kernel selected [{}]".format(prefix))
 
         prefix_list = yield self.list(raw=True)
-
-        if kernel not in prefix_list:
+        if kernel in prefix_list:
+            pass
+        else:
             prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list, details=True)
             if kernel not in prefix_map:
                 print("Kernel not in prefix map")
