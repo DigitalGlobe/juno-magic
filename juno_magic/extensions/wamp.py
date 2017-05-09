@@ -201,7 +201,7 @@ def build_bridge_class(magics_instance):
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
-            magics_instance._wamp_error_handler(details)
+            magics_instance._wamp_err_handler(details)
             yield magics_instance.set_connection(None, do_cleanup=False)
             log.msg("set magics connection to None")
             returnValue(None)
