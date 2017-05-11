@@ -197,14 +197,13 @@ def build_bridge_class(magics_instance):
                     magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
             returnValue(None)
 
-        @inlineCallbacks
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
             magics_instance._wamp_err_handler(details)
             #yield magics_instance.set_connection(None, do_cleanup=False)
             log.msg("set magics connection to None")
-            returnValue(None)
+            #returnValue(None)
 
         def onDisconnect(self):
             # onDisconnect we should just set the connection to None so that we know to reconnect
