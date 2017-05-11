@@ -229,15 +229,12 @@ class WampErrorDispatcher(Component):
             m.update(get_session_info(self.magic._wamp_runner))
         return m
 
-@inlineCallbacks
 def cleanup(proto):
-    res = None
     if hasattr(proto, '_session') and proto._session is not None:
         if proto._session.is_attached():
-            res = yield proto._session.leave()
-        if proto._session.is_connected():
-            res = yield proto._session.disconnect()
-    returnValue(res)
+            return proto._session.leave()
+        elif proto._session.is_connected():
+            return proto._session.disconnect()
 
 def get_connection_error(proto):
     if proto is not None and not proto.wasClean:
