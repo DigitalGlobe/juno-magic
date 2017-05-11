@@ -461,7 +461,7 @@ class JunoMagics(Magics):
                 self._wamp_runner = yield _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
             except Exception as e:
                 self._wamp_err_handler(e)
-                self.set_connection(None)
+                yield self.set_connection(None)
             else:
                 log.msg("Connecting to router: {}".format(self._router_url))
                 log.msg("  Project Realm: {}".format(self._realm))
