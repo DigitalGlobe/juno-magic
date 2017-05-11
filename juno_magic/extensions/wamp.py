@@ -195,11 +195,13 @@ def build_bridge_class(magics_instance):
                 magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
             returnValue(None)
 
+        @inlineCallbacks
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
             magics_instance._wamp_err_handler(details)
-            log.msg("set magics connection to None")
+            res =  yield super(WampConnectionComponent, self).onLeave(details)
+            returnValue(res)
 
         def onDisconnect(self):
             pass
