@@ -231,11 +231,13 @@ class WampErrorDispatcher(Component):
 
 @inlineCallbacks
 def cleanup(proto):
+    res = None
     if hasattr(proto, '_session') and proto._session is not None:
         if proto._session.is_attached():
-            yield proto._session.leave()
+            res = yield proto._session.leave()
         if proto._session.is_connected():
-            yield proto._session.disconnect()
+            res = yield proto._session.disconnect()
+    returnValue(res)
 
 def get_connection_error(proto):
     if proto is not None and not proto.wasClean:
@@ -424,18 +426,20 @@ class JunoMagics(Magics):
     @inlineCallbacks
     def set_connection(self, wamp_connection, do_cleanup=True):
         log.msg("SET_CONNECTION: {}".format(wamp_connection))
-
+        res = None
         if wamp_connection is None: # On a reset, try to cleanup the previous connection and handle any errors
             if self._heartbeat.running:
                 self._heartbeat.stop()
             if do_cleanup:
-                yield cleanup(self._wamp_runner)
+                res = yield cleanup(self._wamp_runner)
                 e = get_connection_error(self._wamp_runner)
                 self._wamp_err_handler(e)
             self._wamp = wamp_connection
+            self._wamp_runner = None
         else:
             self._wamp = wamp_connection # Make this assignment before making the callback
             self._connected.callback(wamp_connection)
+        returnValue(res)
 
     @inlineCallbacks
     def connect(self, wamp_url, reconnect=False, **kwargs):
