@@ -153,8 +153,6 @@ def build_bridge_class(magics_instance):
 
 
         def on_machine(self, msg):
-            # print("[on_machine] {}".format(msg))
-            # print("[on_machine] {}".format(self._machine_callbacks))
             bad_callbacks = []
             for cb in self._machine_callbacks:
                 try:
@@ -193,22 +191,17 @@ def build_bridge_class(magics_instance):
                 print("Attempting to reconnect to {}".format(magics_instance._kernel_prefix))
                 yield self.set_prefix(magics_instance._kernel_prefix)
                 print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
-                if not magics_instance._heartbeat.running:
-                    magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
+            if not magics_instance._heartbeat.running:
+                magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
             returnValue(None)
 
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
             magics_instance._wamp_err_handler(details)
-            #yield magics_instance.set_connection(None, do_cleanup=False)
             log.msg("set magics connection to None")
-            #returnValue(None)
 
         def onDisconnect(self):
-            # onDisconnect we should just set the connection to None so that we know to reconnect
-            # next time connect is called
-            #magics_instance.set_connection(None)
             pass
 
     return WampConnectionComponent
@@ -287,7 +280,7 @@ class JunoMagics(Magics):
         self._token = os.environ.get("JUNO_AUTH_TOKEN")
         self._sp = None
         self._connected = None
-        self._hb_interval = 10
+        self._hb_interval = 5
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
         self._errors = []
@@ -433,12 +426,12 @@ class JunoMagics(Magics):
         log.msg("SET_CONNECTION: {}".format(wamp_connection))
 
         if wamp_connection is None: # On a reset, try to cleanup the previous connection and handle any errors
+            if self._heartbeat.running:
+                self._heartbeat.stop()
             if do_cleanup:
                 yield cleanup(self._wamp_runner)
                 e = get_connection_error(self._wamp_runner)
                 self._wamp_err_handler(e)
-            if self._heartbeat.running:
-                self._heartbeat.stop()
             self._wamp = wamp_connection
         else:
             self._wamp = wamp_connection # Make this assignment before making the callback
@@ -550,14 +543,20 @@ class JunoMagics(Magics):
         # returns True or False if we are still connected
         # if True, it means everything is ok
         # if False, it means the remote kernel client has died/is not active
+        if not self.connected:
+            yield self.set_connection(None)
+            log.msg("DETECTED: dead wamp connection; dispatching connection report and resetting to None")
+            returnValue(None)
         try:
-            res = yield self._wamp.call(".".join([self._kernel_prefix, u"ping"]))
-            log.msg("_pinging: " + ".".join([self._kernel_prefix, "ping"]))
-            log.msg("_pong response: {}".format(res))
+            if self._kernel_prefix is not None:
+                res = yield self._wamp.call(".".join([self._kernel_prefix, u"ping"]))
+                log.msg("_pinging: " + ".".join([self._kernel_prefix, "ping"]))
+                log.msg("_pong response: {}".format(res))
             returnValue(res)
         except Exception as e:
             log.msg("_pong error: {}".format(e))
-            yield self.set_connection(None)
+            res = yield self._wamp.reset_prefix()
+            returnValue(None)
 
     def _get_kernel_names(self, prefix_list, details=False):
         headers = {"Authorization": "Bearer {}".format(self._token)}
