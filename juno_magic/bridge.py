@@ -276,6 +276,7 @@ def main():
     def reconnector(shutdown_on_timeout):
         while True:
             try:
+                hb = None
                 log.msg("Attempting to connect...")
                 wampconnection = yield _bridge_runner.run(build_bridge_class(client), start_reactor=False)
                 hb = LoopingCall(heartbeat, (wampconnection))
@@ -285,11 +286,13 @@ def main():
                 while wampconnection.isOpen():
                     if shutdown_on_timeout:
                         if wampconnection._session._has_timedout:
+                            hb.stop()
                             res = yield cleanup(wampconnection)
                             returnValue(res)
                     yield sleep(5.0)
             except ConnectionRefusedError as ce:
-                hb.stop()
+                if hb is not None and hb.running:
+                    hb.stop()
                 log.msg("ConnectionRefusedError: Trying to reconnect... ")
                 yield sleep(1.0)
 
