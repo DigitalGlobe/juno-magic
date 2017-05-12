@@ -280,11 +280,13 @@ def main():
                 log.msg("ConnectionRefusedError: Trying to reconnect... ")
                 yield sleep(1.0)
 
-    ioloop = IOLoop.current()
+    def shutdown(result):
+        IOLoop.current().stop()
+
     d = reconnector(args.auto_shutdown)
-    d.addCallback(ioloop.stop)
+    d.addCallback(shutdown)
     # start the tornado io loop
-    ioloop.start()
+    IOLoop.current().start()
 
 if __name__ == "__main__":
     main()
