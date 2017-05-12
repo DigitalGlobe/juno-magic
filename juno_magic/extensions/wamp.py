@@ -543,9 +543,6 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def _ping(self):
-        # returns True or False if we are still connected
-        # if True, it means everything is ok
-        # if False, it means the remote kernel client has died/is not active
         if not self.connected:
             yield self.set_connection(None)
             log.msg("DETECTED: dead wamp connection; dispatching connection report and resetting to None")
