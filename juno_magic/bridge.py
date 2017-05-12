@@ -39,6 +39,13 @@ if sys.version.startswith("3"):
 
 _zmq_factory = ZmqFactory()
 
+def cleanup(proto):
+    if hasattr(proto, '_session') and proto._session is not None:
+        if proto._session.is_attached():
+            return proto._session.leave()
+        elif proto._session.is_connected():
+            return proto._session.disconnect()
+
 class ZmqProxyConnection(ZmqSubConnection):
     def __init__(self, endpoint, wamp_session, prefix):
         self._endpoint = endpoint
@@ -146,7 +153,8 @@ def build_bridge_class(client):
 
         @wamp.register(u"io.timbr.kernel.{}.ping".format(_key))
         def ping(self):
-            return client.is_alive()
+            self._client_is_alive = client.is_alive()
+            return self._client_is_alive
 
         @inlineCallbacks
         def is_active(self, prefix):
@@ -235,6 +243,8 @@ def main():
     parser.add_argument("--wamp-realm", default=u"jupyter", help='Router realm')
     parser.add_argument("--wamp-url", default=u"ws://127.0.0.1:8123", help="WAMP Websocket URL")
     parser.add_argument("--token", type=unicode, help="OAuth token to connect to router")
+    parser.add_argument("--auto-shutdown", action="store_true",
+                        default=False, help="When set, disconnect and cleanup Wamp session when heartbeat times out and then stop the IOLoop")
     parser.add_argument("file", help="Connection file")
     args = parser.parse_args()
 
@@ -253,7 +263,7 @@ def main():
     log.msg("  Project Realm: %s" % (args.wamp_realm))
 
     @inlineCallbacks
-    def reconnector():
+    def reconnector(shutdown_on_timeout):
         while True:
             try:
                 log.msg("Attempting to connect...")
@@ -261,14 +271,20 @@ def main():
                 log.msg(wampconnection)
                 yield sleep(10.0) # Give the connection time to set _session
                 while wampconnection.isOpen():
+                    if shutdown_on_timeout:
+                        if hasattr(wampconnection._session, '_client_is_alive') and not wampconnection._session._client_is_alive:
+                            res = yield cleanup(wampconnection)
+                            returnValue(res)
                     yield sleep(5.0)
             except ConnectionRefusedError as ce:
                 log.msg("ConnectionRefusedError: Trying to reconnect... ")
                 yield sleep(1.0)
 
-    reconnector()
+    ioloop = IOLoop.current()
+    d = reconnector(args.auto_shutdown)
+    d.addCallback(ioloop.stop)
     # start the tornado io loop
-    IOLoop.current().start()
+    ioloop.start()
 
 if __name__ == "__main__":
     main()
