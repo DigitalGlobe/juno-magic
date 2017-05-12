@@ -66,6 +66,8 @@ def build_bridge_class(client):
         prefix_list = set()
         machine_connection = None
         _lock = DeferredLock()
+        _has_been_pinged = False
+        _has_timedout = False
 
         @wamp.register(u"io.timbr.kernel.{}.execute".format(_key))
         @inlineCallbacks
@@ -153,8 +155,8 @@ def build_bridge_class(client):
 
         @wamp.register(u"io.timbr.kernel.{}.ping".format(_key))
         def ping(self):
-            self._client_is_alive = client.is_alive()
-            return self._client_is_alive
+            self._has_been_pinged = True
+            return client.is_alive()
 
         @inlineCallbacks
         def is_active(self, prefix):
@@ -245,6 +247,7 @@ def main():
     parser.add_argument("--token", type=unicode, help="OAuth token to connect to router")
     parser.add_argument("--auto-shutdown", action="store_true",
                         default=False, help="When set, disconnect and cleanup Wamp session when heartbeat times out and then stop the IOLoop")
+    parser.add_argument("--hb-interval", type=int, default=30, help="The heartbeat interval used when auto-shutdown is set")
     parser.add_argument("file", help="Connection file")
     args = parser.parse_args()
 
@@ -262,23 +265,34 @@ def main():
     log.msg("Connecting to router: %s" % args.wamp_url)
     log.msg("  Project Realm: %s" % (args.wamp_realm))
 
+    def heartbeat(proto):
+        if hasattr(proto, '_session') and proto._session is not None:
+            if not proto._session._has_been_pinged:
+                proto._session._has_timedout = True
+            else:
+                proto._session._has_been_pinged = False
+
     @inlineCallbacks
     def reconnector(shutdown_on_timeout):
         while True:
             try:
                 log.msg("Attempting to connect...")
                 wampconnection = yield _bridge_runner.run(build_bridge_class(client), start_reactor=False)
+                hb = LoopingCall(heartbeat, (wampconnection))
+                hb.start(args.hb_interval, now=False)
                 log.msg(wampconnection)
                 yield sleep(10.0) # Give the connection time to set _session
                 while wampconnection.isOpen():
                     if shutdown_on_timeout:
-                        if hasattr(wampconnection._session, '_client_is_alive') and not wampconnection._session._client_is_alive:
+                        if wampconnection._session._has_timedout:
                             res = yield cleanup(wampconnection)
                             returnValue(res)
                     yield sleep(5.0)
             except ConnectionRefusedError as ce:
+                hb.stop()
                 log.msg("ConnectionRefusedError: Trying to reconnect... ")
                 yield sleep(1.0)
+
 
     def shutdown(result):
         IOLoop.current().stop()
