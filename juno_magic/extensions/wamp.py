@@ -219,7 +219,6 @@ class WampErrorDispatcher(Component):
     def __call__(self, failure):
         self.exception = failure
         if failure is not None:
-            self.magic._errors.append(failure)
             msg = self._format_msg(failure)
             self.send(msg)
 
@@ -284,7 +283,6 @@ class JunoMagics(Magics):
         self._hb_interval = 5
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
-        self._errors = []
         self._wamp_err_handler = WampErrorDispatcher(self)
 
         if self._debug:
