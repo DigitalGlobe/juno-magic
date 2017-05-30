@@ -211,7 +211,7 @@ def build_bridge_class(magics_instance):
 
 class WampErrorDispatcher(Component):
     exception = None
-    def __init__(self, magic, module='timbr.machine', **kwargs):
+    def __init__(self, magic, module='JunoMagic', **kwargs):
         self.magic = magic
         self._module = module
         super(WampErrorDispatcher, self).__init__(target_name=module,  **kwargs)
