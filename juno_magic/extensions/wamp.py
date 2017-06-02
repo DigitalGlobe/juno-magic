@@ -550,7 +550,7 @@ class JunoMagics(Magics):
                 res = yield self._wamp.call(".".join([self._kernel_prefix, u"ping"]))
                 log.msg("_pinging: " + ".".join([self._kernel_prefix, "ping"]))
                 log.msg("_pong response: {}".format(res))
-            returnValue(res)
+            returnValue(None)
         except Exception as e:
             log.msg("_pong error: {}".format(e))
             res = yield self._wamp.reset_prefix()
