@@ -56,6 +56,8 @@ from jupyter_react import Component
 
 JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/api/kernels/list")
 
+MAX_MESSAGE_PAYLOAD_SIZE = 104857600
+MAX_FRAME_PAYLOAD_SIZE = 104857600
 
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
@@ -251,6 +253,10 @@ def get_connection_error(proto):
             return ServerConnectionDropTimeout(proto.wasNotCleanReason)
         elif proto.wasServingFlashSocketPolicyFile:
             return ServingFlashSocketPolicyFileError(proto.wasNotCleanReason)
+        elif proto.wasMaxFramePayloadSizeExceeded:
+            return MaxFramePayloadSizeExceededError(proto.wasNotCleanReason)
+        elif proto.wasMaxMessagePayloadSizeExceeded:
+            return MaxMessagePayloadSizeExceededError(proto.wasNotCleanReason)
         elif proto.wasNotCleanReason is not None:
             return ConnectError(proto.wasNotCleanReason)
 
@@ -453,6 +459,8 @@ class JunoMagics(Magics):
             _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
             try:
                 self._wamp_runner = yield _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
+                self._wamp_runner.maxMessagePayloadSize = MAX_MESSAGE_PAYLOAD_SIZE
+                self._wamp_runner.maxFramePayloadSize = MAX_FRAME_PAYLOAD_SIZE
             except Exception as e:
                 self._wamp_err_handler(e)
                 yield self.set_connection(None)
