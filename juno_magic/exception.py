@@ -18,3 +18,8 @@ class ServerConnectionDropTimeoutError(ConnectionLost):
 class ServingFlashSocketPolicyFileError(ConnectionLost):
     """Connection to the other side was lost in a non-clean fashion"""
 
+class MaxMessagePayloadSizeExceededError(ConnectionLost):
+    """Connection to the other side was lost in a non-clean fashion"""
+
+class MaxFramePayloadSizeExceededError(ConnectionLost):
+    """Connection to the other side was lost in a non-clean fashion"""
