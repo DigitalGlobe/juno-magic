@@ -237,7 +237,6 @@ def build_bridge_class(client):
 
 def main():
     global _bridge_runner
-    log.startLogging(sys.stdout)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="Enable debug output.")
@@ -250,6 +249,12 @@ def main():
     parser.add_argument("--hb-interval", type=int, default=30, help="The heartbeat interval used when auto-shutdown is set")
     parser.add_argument("file", help="Connection file")
     args = parser.parse_args()
+
+    if args.debug:
+        try:
+            log.startLogging(open('/home/gremlin/wamp.log', 'w'), setStdout=False)
+        except IOError:
+            pass
 
     with open(args.file) as f:
         config = json.load(f)
