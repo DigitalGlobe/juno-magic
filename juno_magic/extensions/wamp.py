@@ -56,8 +56,8 @@ from jupyter_react import Component
 
 JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/api/kernels/list")
 
-MAX_MESSAGE_PAYLOAD_SIZE = 104857600
-MAX_FRAME_PAYLOAD_SIZE = 104857600
+MAX_MESSAGE_PAYLOAD_SIZE = 0
+MAX_FRAME_PAYLOAD_SIZE = 0
 
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
