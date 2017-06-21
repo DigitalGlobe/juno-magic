@@ -561,7 +561,6 @@ class JunoMagics(Magics):
             returnValue(None)
         except Exception as e:
             log.msg("_pong error: {}".format(e))
-            res = yield self._wamp.reset_prefix()
             returnValue(None)
 
     def _get_kernel_names(self, prefix_list, details=False):
