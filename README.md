@@ -42,3 +42,5 @@ Access tokens can be obtained by creating an account and generating an access to
 # or
 %juno select <kernel-name>
 ```
+
+For more information contact Pramukta Kumar <pramukta.kumar@digitalglobe.com> or Jamie Polackwich <jamie.polackwich@digitalglobe.com>
