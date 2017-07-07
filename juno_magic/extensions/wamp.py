@@ -400,7 +400,7 @@ class JunoMagics(Magics):
                 return result
 
             self._lock.acquire()
-            result = args.fn(cell=cell, **vars*args))
+            result = args.fn(cell=cell, **vars(args))
             if isinstance(result, Deferred):
                 result.addCallback(result_cb)
                 result.addCallback(release_cb)
