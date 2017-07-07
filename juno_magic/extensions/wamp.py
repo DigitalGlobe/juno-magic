@@ -281,7 +281,6 @@ def get_session_info(proto):
            }
     return msg
 
-
 @magics_class
 class JunoMagics(Magics):
     def __init__(self, shell):
@@ -300,7 +299,7 @@ class JunoMagics(Magics):
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
         self._wamp_err_handler = WampErrorDispatcher(self)
-        self._lock = locks.Lock()
+        self._lock = Lock()
 
         if self._debug:
             try:
@@ -378,7 +377,6 @@ class JunoMagics(Magics):
         return parser
 
     @line_cell_magic
-    @gen.coroutine
     def juno(self, line, cell=None):
         try:
             input_args = shlex.split(line)
@@ -386,19 +384,32 @@ class JunoMagics(Magics):
                 input_args.insert(0, "execute")
             args, extra = self._parser.parse_known_args(input_args)
 
-            @gen.coroutine
-            def critical(deferred):
-                output = yield wrap_deferred(deferred)
-                raise gen.Return(output)
+            def wait_on_deferred(d):
+                while not d.called:
+                    absleep(0.05)
+                return d
 
-            with (yield self._lock.acquire()):
-                result = args.fn(cell=cell, **vars(args))
-                if isinstance(result, Deferred):
-                    output = yield critical(result)
-                    if output is not None:
-                        publish_to_display(output)
+            def result_cb(result):
+                if result is not None:
+                    publish_to_display(result)
                 else:
-                    raise gen.Return(result)
+                    return "[muted]"
+
+            def release_cb(result):
+                self._lock.release()
+                return result
+
+            self._lock.acquire()
+            result = args.fn(cell=cell, **vars*args))
+            if isinstance(result, Deferred):
+                result.addCallback(result_cb)
+                result.addCallback(release_cb)
+                t = Thread(target=wait_on_deferred, args=(result,))
+                t.start()
+                t.join()
+            else:
+                self._lock.release()
+                return result
 
         except SystemExit:
             pass
