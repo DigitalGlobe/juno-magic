@@ -391,9 +391,9 @@ class JunoMagics(Magics):
                 output = yield wrap_deferred(deferred)
                 raise gen.Return(output)
 
-            with yield(self._lock.acquire()):
-                result = args.fn(cell=cell, **vars(args)))
-                if isinstance(output, Deferred):
+            with (yield self._lock.acquire()):
+                result = args.fn(cell=cell, **vars(args))
+                if isinstance(result, Deferred):
                     output = yield critical(result)
                     if output is not None:
                         publish_to_display(output)
