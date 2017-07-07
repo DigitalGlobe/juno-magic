@@ -384,11 +384,6 @@ class JunoMagics(Magics):
                 input_args.insert(0, "execute")
             args, extra = self._parser.parse_known_args(input_args)
 
-            def wait_on_deferred(d):
-                while not d.called:
-                    absleep(0.05)
-                return d
-
             def result_cb(result):
                 if result is not None:
                     publish_to_display(result)
@@ -404,9 +399,8 @@ class JunoMagics(Magics):
             if isinstance(result, Deferred):
                 result.addCallback(result_cb)
                 result.addCallback(release_cb)
-                t = Thread(target=wait_on_deferred, args=(result,))
-                t.start()
-                t.join()
+                self._lock.acquire() #Block until deferred fires
+                self._lock.release()
             else:
                 self._lock.release()
                 return result
