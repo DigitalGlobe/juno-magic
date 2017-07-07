@@ -299,7 +299,6 @@ class JunoMagics(Magics):
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
         self._wamp_err_handler = WampErrorDispatcher(self)
-        self._lock = Lock()
 
         if self._debug:
             try:
@@ -378,6 +377,7 @@ class JunoMagics(Magics):
 
     @line_cell_magic
     def juno(self, line, cell=None):
+        _lock = Lock()
         try:
             input_args = shlex.split(line)
             if cell is not None:
@@ -391,18 +391,18 @@ class JunoMagics(Magics):
                     return "[muted]"
 
             def release_cb(result):
-                self._lock.release()
+                _lock.release()
                 return result
 
-            self._lock.acquire()
+            _lock.acquire()
             result = args.fn(cell=cell, **vars(args))
             if isinstance(result, Deferred):
                 result.addCallback(result_cb)
                 result.addCallback(release_cb)
-                self._lock.acquire() #Block until deferred fires
-                self._lock.release()
+                _lock.acquire() #Block until deferred fires
+                _lock.release()
             else:
-                self._lock.release()
+                _lock.release()
                 return result
 
         except SystemExit:
