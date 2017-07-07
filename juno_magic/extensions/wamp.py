@@ -25,6 +25,8 @@ try:
     tornado.platform.twisted.install()
 except ReactorAlreadyInstalledError:
     pass
+from tornado import gen, locks
+from tornado.concurrent import TracebackFuture
 
 from twisted.python import log
 from twisted.internet import reactor, threads
@@ -38,6 +40,7 @@ from autobahn.wamp.exception import ApplicationError, TransportLost
 from autobahn.websocket.util import parse_url
 from autobahn.twisted.util import sleep as absleep
 
+from threading import Thread, Lock, Event, ThreadError
 
 from collections import deque
 
@@ -58,6 +61,13 @@ JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/
 
 MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
+
+def wrap_deferred(deferred):
+    # Could also use concurrent.futures.Future from the standard library,
+    # but Tornado's version gives better tracebacks on python 2.
+    future = TracebackFuture()
+    deferred.addCallbacks(future.set_result, future.set_exception)
+    return future
 
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
@@ -290,6 +300,7 @@ class JunoMagics(Magics):
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
         self._wamp_err_handler = WampErrorDispatcher(self)
+        self._lock = locks.Lock()
 
         if self._debug:
             try:
@@ -367,17 +378,28 @@ class JunoMagics(Magics):
         return parser
 
     @line_cell_magic
+    @gen.coroutine
     def juno(self, line, cell=None):
         try:
             input_args = shlex.split(line)
             if cell is not None:
                 input_args.insert(0, "execute")
             args, extra = self._parser.parse_known_args(input_args)
-            output = args.fn(cell=cell, **vars(args))
-            if isinstance(output, Deferred):
-                output.addCallback(lambda x: publish_to_display(x) if x is not None else "[muted]")
-            else:
-                return output
+
+            @gen.coroutine
+            def critical(deferred):
+                output = yield wrap_deferred(deferred)
+                raise gen.Return(output)
+
+            with yield(self._lock.acquire()):
+                result = args.fn(cell=cell, **vars(args)))
+                if isinstance(output, Deferred):
+                    output = yield critical(result)
+                    if output is not None:
+                        publish_to_display(output)
+                else:
+                    raise gen.Return(result)
+
         except SystemExit:
             pass
 
