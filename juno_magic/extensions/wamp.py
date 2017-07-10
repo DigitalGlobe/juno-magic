@@ -8,6 +8,7 @@ from pprint import pprint
 
 import argparse
 import os
+_CPID = os.getpid()
 import sys
 import shlex
 import json
@@ -186,6 +187,7 @@ def build_bridge_class(magics_instance):
 
         @inlineCallbacks
         def onJoin(self, details):
+            log.msg("Wamp client running at process id {}".format(os.getpid()))
             log.msg("[onJoin] Registering RPC methods...")
             yield self.register(self)
             log.msg("[onJoin] ...done.")
@@ -301,6 +303,7 @@ class JunoMagics(Magics):
             except IOError:
                 pass
         log.msg("Twisted adapter install status: {}".format(_TWISTED_INSTALL_STATUS))
+        log.msg("Script pid: {}".format(_CPID))
         log.msg("JunoMagic running in process id {}".format(os.getpid()))
 
         try:        # set local kernel key
