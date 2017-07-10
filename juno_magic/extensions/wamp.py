@@ -23,8 +23,12 @@ from tornado.ioloop import IOLoop
 import tornado.platform.twisted
 try:
     tornado.platform.twisted.install()
+    _TWISTED_INSTALL_STATUS = "Installed Successfully"
 except ReactorAlreadyInstalledError:
+    _TWISTED_INSTALL_STATUS = "Reactor Already Installed"
     pass
+except Exception as e:
+    _TWISTED_INSTALL_STATUS = "Error Installing Reator: {}".format(e)
 
 from twisted.python import log
 from twisted.internet import reactor, threads
@@ -296,6 +300,8 @@ class JunoMagics(Magics):
                 log.startLogging(open('/home/gremlin/wamp.log', 'w'), setStdout=False)
             except IOError:
                 pass
+        log.msg("Twisted adapter install status: {}".format(_TWISTED_INSTALL_STATUS))
+        log.msg("JunoMagic running in process id {}".format(os.getpid()))
 
         try:        # set local kernel key
             with open(self._connection_file) as f:
