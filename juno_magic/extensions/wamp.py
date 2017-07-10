@@ -19,12 +19,12 @@ if sys.version.startswith("3"):
 from twisted.internet.error import ReactorAlreadyInstalledError
 from zmq.eventloop import ioloop
 ioloop.install()
-from tornado.ioloop import IOLoop
-import tornado.platform.twisted
-try:
-    tornado.platform.twisted.install()
-except ReactorAlreadyInstalledError:
-    pass
+#from tornado.ioloop import IOLoop
+#import tornado.platform.twisted
+#try:
+#    tornado.platform.twisted.install()
+#except ReactorAlreadyInstalledError:
+#    pass
 from tornado import gen, locks
 from tornado.concurrent import TracebackFuture
 
@@ -485,7 +485,7 @@ class JunoMagics(Magics):
             self._router_url = wamp_url
             _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
             try:
-                self._wamp_runner = yield _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
+                self._wamp_runner = yield _wamp_application_runner.run(build_bridge_class(self), start_reactor=True) # -> returns a deferred
                 self._wamp_runner.maxMessagePayloadSize = MAX_MESSAGE_PAYLOAD_SIZE
                 self._wamp_runner.maxFramePayloadSize = MAX_FRAME_PAYLOAD_SIZE
             except Exception as e:
