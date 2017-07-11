@@ -18,8 +18,6 @@ if sys.version.startswith("3"):
     unicode = str
 
 from twisted.internet.error import ReactorAlreadyInstalledError
-from zmq.eventloop import ioloop
-ioloop.install()
 from tornado.ioloop import IOLoop
 import tornado.platform.twisted
 try:
@@ -63,6 +61,8 @@ JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/
 
 MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
+
+import time
 
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
@@ -381,6 +381,7 @@ class JunoMagics(Magics):
             input_args = shlex.split(line)
             if cell is not None:
                 input_args.insert(0, "execute")
+                time.sleep(10.0)
             args, extra = self._parser.parse_known_args(input_args)
             output = args.fn(cell=cell, **vars(args))
             if isinstance(output, Deferred):
