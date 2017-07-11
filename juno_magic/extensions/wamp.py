@@ -17,14 +17,14 @@ if sys.version.startswith("3"):
     unicode = str
 
 from twisted.internet.error import ReactorAlreadyInstalledError
-from zmq.eventloop import ioloop
-ioloop.install()
-#from tornado.ioloop import IOLoop
-#import tornado.platform.twisted
-#try:
-#    tornado.platform.twisted.install()
-#except ReactorAlreadyInstalledError:
-#    pass
+#from zmq.eventloop import ioloop
+#ioloop.install()
+from tornado.ioloop import IOLoop
+import tornado.platform.twisted
+try:
+    tornado.platform.twisted.install()
+except ReactorAlreadyInstalledError:
+    pass
 from tornado import gen, locks
 from tornado.concurrent import TracebackFuture
 
