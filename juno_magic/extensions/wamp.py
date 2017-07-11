@@ -1,3 +1,7 @@
+from twisted.internet import reactor
+from threading import Thread
+_REACTOR_THREAD = Thread(target=reactor.run, args=(False,))
+_REACTOR_THREAD.start()
 from IPython.core.magic import (Magics, magics_class, line_magic,
                                 cell_magic, line_cell_magic)
 from IPython import get_ipython
@@ -20,19 +24,9 @@ if sys.version.startswith("3"):
 from twisted.internet.error import ReactorAlreadyInstalledError
 #from zmq.eventloop import ioloop
 #ioloop.install()
-from tornado.ioloop import IOLoop
-import tornado.platform.twisted
-try:
-    tornado.platform.twisted.install()
-    _TWISTED_INSTALL_STATUS = "Installed Successfully"
-except ReactorAlreadyInstalledError:
-    _TWISTED_INSTALL_STATUS = "Reactor Already Installed"
-    pass
-except Exception as e:
-    _TWISTED_INSTALL_STATUS = "Error Installing Reator: {}".format(e)
 
 from twisted.python import log
-from twisted.internet import reactor, threads
+from twisted.internet import threads
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
