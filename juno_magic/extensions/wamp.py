@@ -1,5 +1,5 @@
 from twisted.internet import reactor, threads
-from threading import Thred, Lock, Event, ThreadError
+from threading import Thread, Lock, Event, ThreadError
 _REACTOR_THREAD  = Thread(target=reactor.run, args=(False,))
 _REACTOR_THREAD.start()
 from twisted.python import log
