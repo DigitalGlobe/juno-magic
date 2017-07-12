@@ -1,3 +1,12 @@
+from twisted.internet import reactor, threads
+from threading import Thred, Lock, Event, ThreadError
+_REACTOR_THREAD  = Thread(target=reactor.run, args=(False,))
+_REACTOR_THREAD.start()
+from twisted.python import log
+from twisted.internet.task import LoopingCall
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
+from twisted.internet.error import ConnectError, ConnectionLost
+
 from IPython.core.magic import (Magics, magics_class, line_magic,
                                 cell_magic, line_cell_magic)
 from IPython import get_ipython
@@ -16,31 +25,12 @@ from time import sleep
 if sys.version.startswith("3"):
     unicode = str
 
-from twisted.internet.error import ReactorAlreadyInstalledError
-#from zmq.eventloop import ioloop
-#ioloop.install()
-from tornado.ioloop import IOLoop
-import tornado.platform.twisted
-try:
-    tornado.platform.twisted.install()
-except ReactorAlreadyInstalledError:
-    pass
-from tornado import gen, locks
-from tornado.concurrent import TracebackFuture
-
-from twisted.python import log
-from twisted.internet import reactor, threads
-from twisted.internet.task import LoopingCall
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 from autobahn.twisted.websocket import WampWebSocketClientProtocol
-from twisted.internet.error import ConnectError, ConnectionLost
 from autobahn import wamp
 from autobahn.wamp.exception import ApplicationError, TransportLost
 from autobahn.websocket.util import parse_url
 from autobahn.twisted.util import sleep as absleep
-
-from threading import Thread, Lock, Event, ThreadError
 
 from collections import deque
 
@@ -377,34 +367,22 @@ class JunoMagics(Magics):
 
     @line_cell_magic
     def juno(self, line, cell=None):
-        _lock = Lock()
+        _block = False
         try:
             input_args = shlex.split(line)
             if cell is not None:
                 input_args.insert(0, "execute")
+                _block = True
             args, extra = self._parser.parse_known_args(input_args)
-
-            def result_cb(result):
-                if result is not None:
-                    publish_to_display(result)
-                else:
-                    return "[muted]"
-
-            def release_cb(result):
-                _lock.release()
+            if _block:
+                result = threads.blockingCallFromThread(reactor, args.fn, cell=cell, **vars(args))
                 return result
-
-            _lock.acquire()
-            result = args.fn(cell=cell, **vars(args))
-            if isinstance(result, Deferred):
-                result.addCallback(result_cb)
-                result.addCallback(release_cb)
-                _lock.acquire() #Block until deferred fires
-                _lock.release()
             else:
-                _lock.release()
-                return result
-
+                result = args.fn(cell=cell, **vars(args))
+                if isinstance(output, Deferred):
+                    result.addCallback(lambda x: publish_to_display(x) if x is not None else "[muted]")
+                else:
+                    return result
         except SystemExit:
             pass
 
@@ -485,7 +463,7 @@ class JunoMagics(Magics):
             self._router_url = wamp_url
             _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
             try:
-                self._wamp_runner = yield _wamp_application_runner.run(build_bridge_class(self), start_reactor=True) # -> returns a deferred
+                self._wamp_runner = yield _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
                 self._wamp_runner.maxMessagePayloadSize = MAX_MESSAGE_PAYLOAD_SIZE
                 self._wamp_runner.maxFramePayloadSize = MAX_FRAME_PAYLOAD_SIZE
             except Exception as e:
@@ -572,7 +550,9 @@ class JunoMagics(Magics):
         yield self.connect(self._router_url)
         if prefix is not None:
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
-        output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
+        else:
+            output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
+
 
     @inlineCallbacks
     def _ping(self):
