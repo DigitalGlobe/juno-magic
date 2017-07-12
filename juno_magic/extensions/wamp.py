@@ -52,13 +52,6 @@ JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/
 MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
 
-def wrap_deferred(deferred):
-    # Could also use concurrent.futures.Future from the standard library,
-    # but Tornado's version gives better tracebacks on python 2.
-    future = TracebackFuture()
-    deferred.addCallbacks(future.set_result, future.set_exception)
-    return future
-
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
     publish_display_data(output)
