@@ -379,7 +379,7 @@ class JunoMagics(Magics):
                 return result
             else:
                 result = args.fn(cell=cell, **vars(args))
-                if isinstance(output, Deferred):
+                if isinstance(result, Deferred):
                     result.addCallback(lambda x: publish_to_display(x) if x is not None else "[muted]")
                 else:
                     return result
