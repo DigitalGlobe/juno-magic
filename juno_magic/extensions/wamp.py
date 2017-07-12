@@ -54,7 +54,7 @@ MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
 
 status_msg_cache = defaultdict(Deferred)
-clean_status_cache = lambda x: del status_msg_cache[x]
+clean_status_cache = lambda x: status_msg_cache.__delitem__(x)
 
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
