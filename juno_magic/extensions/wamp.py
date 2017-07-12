@@ -21,6 +21,7 @@ import sys
 import shlex
 import json
 from time import sleep
+from collections import defaultdict
 
 if sys.version.startswith("3"):
     unicode = str
@@ -52,6 +53,9 @@ JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/
 MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
 
+status_msg_cache = defaultdict(Deferred)
+clean_status_cache = lambda x: del status_msg_cache[x]
+
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
     publish_display_data(output)
@@ -64,6 +68,12 @@ def build_display_data(obj):
     if "_repr_javascript_" in methods:
         output["application/javascript"] = obj._repr_javascript_()
     return output
+
+def handle_iopub_msg(msg):
+    parent_id = msg["parent_header"]["msg_id"]
+    if msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":
+        status_msg_cache[parent_id].callback(True)
+        reactor.callLater(1.0, clean_status_cache, parent_id)
 
 def handle_comm_open(msg):
     comm_manager = get_ipython().kernel.comm_manager
@@ -142,7 +152,7 @@ def build_bridge_class(magics_instance):
             elif msg["msg_type"] in ["comm_msg", "comm_close"]:
                 handle_comm_msg(msg)
             elif msg["msg_type"] in ["execute_input", "execution_state", "status", "clear_output"]:
-                pass
+                handle_iopub_msg(msg)
             else:
                 pprint(msg)
 
@@ -545,6 +555,7 @@ class JunoMagics(Magics):
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
         else:
             output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
+        yield status_msg_cache[output]
 
 
     @inlineCallbacks
