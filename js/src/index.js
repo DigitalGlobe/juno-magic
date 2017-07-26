@@ -37,7 +37,7 @@ function load_ipython_extension() {
       loadJuno( '//' + window.location.host )
     }
     Events.on( 'kernel_created.Kernel kernel_created.Session', ( event, data ) => {
-      handleKernel( data.kernel );
+      loadJuno( '//' + window.location.host );
     });
   });
 }
