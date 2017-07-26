@@ -28,29 +28,13 @@ function load_ipython_extension() {
     });
   }
 
-  function handleKernel( kernel ) {
-    kernel.execute( "import os\nprint os.environ['JUNO_HOST']", {
-      iopub: {
-        output: function( response ) {
-          var host = 'http://localhost:3000';
-          //var host = 'drama.timbr.io';
-          //var host = 'app0.timbr.io';
-          if ( response.msg_type === 'stream' ) {
-            host = response.content.text;
-          }
-          loadJuno( host );
-        }
-      }
-    }, { silent: false } ); 
-  }
-
   requirejs( [
     "base/js/namespace",
     "base/js/events"
   ], function( Jupyter, Events ) {
     // On new kernel session create new comm managers
     if ( Jupyter.notebook && Jupyter.notebook.kernel ) {
-      handleKernel( Jupyter.notebook.kernel );
+      loadJuno( '//' + window.location.host )
     }
     Events.on( 'kernel_created.Kernel kernel_created.Session', ( event, data ) => {
       handleKernel( data.kernel );
