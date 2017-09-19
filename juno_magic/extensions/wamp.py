@@ -420,7 +420,16 @@ class JunoMagics(Magics):
 
     @property
     def _ready_to_connect(self):
-        return not self._connection_active
+        # Below, check if a deferred has been assigned but not yet called; an
+        # uncalled self._connected implies a connection has been initialzed and
+        # is attempting to connect.This needs to be checked before we implement
+        # the actual WAMP connection status logic. This avoids a potential race
+        # that might occur due to simultaneous (or close to simultaneous)
+        # connect calls by ensuring the existence of not more than a single
+        # connection instance at any time.
+        if self._connected is None or isinstance(self._connected, Deferred) and self._connected.called:
+            return not self._connection_active
+        return False
 
     @property
     def connected(self):
@@ -447,6 +456,7 @@ class JunoMagics(Magics):
                 self._wamp_err_handler(e)
             self._wamp = wamp_connection
             self._wamp_runner = None
+            self._connected = None
         else:
             self._wamp = wamp_connection # Make this assignment before making the callback
             self._connected.callback(wamp_connection)
