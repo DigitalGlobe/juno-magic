@@ -372,6 +372,7 @@ class JunoMagics(Magics):
         execute_parser = subparsers.add_parser("execute", help="Evaluate code on remote kernel")
         execute_parser.add_argument("prefix", help="Prefix for accessing the remote kernel", nargs="?")
         execute_parser.set_defaults(fn=self.execute)
+
         return parser
 
     @line_cell_magic
