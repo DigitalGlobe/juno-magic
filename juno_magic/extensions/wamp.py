@@ -218,19 +218,31 @@ def build_bridge_class(magics_instance):
 
     return WampConnectionComponent
 
-
-class WampErrorDispatcher(Component):
-    exception = None
-    def __init__(self, magic, module='JunoMagic', **kwargs):
-        self.magic = magic
+class JunoCommDispatcher(Component):
+    def __init__(self,  module='JunoMagic', **kwargs):
         self._module = module
-        super(WampErrorDispatcher, self).__init__(target_name=module,  **kwargs)
+        super(JunoCommDispatcher, self).__init__(target_name=module, **kwargs)
+
+class InterruptHandler(object):
+    def __init__(self, magic, **kwargs):
+        self.magic = magic
+        self.magic._dispatcher.on_msg(self._handle_msg)
+
+    def _handle_msg(self, msg):
+        data = msg['content']['data']
+        if data.get('method', None) == 'interrupt':
+            self.magic.interrupt()
+
+class WampErrorDispatcher(object):
+    exception = None
+    def __init__(self, magic, **kwargs):
+        self.magic = magic
 
     def __call__(self, failure):
         self.exception = failure
         if failure is not None:
             msg = self._format_msg(failure)
-            self.send(msg)
+            self.magic._dispatcher.send(msg)
 
     def _format_msg(self, msg):
         m = {'class': str(msg.__class__)}
@@ -296,6 +308,8 @@ class JunoMagics(Magics):
         self._hb_interval = 5
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
+        self._dispatcher = JunoCommDispatcher()
+        self._interrupt_handler = InterruptHandler(self)
         self._wamp_err_handler = WampErrorDispatcher(self)
         self._queue = Queue.Queue()
 
@@ -395,6 +409,9 @@ class JunoMagics(Magics):
                     return result
         except SystemExit:
             pass
+
+    def interrupt(self):
+        self._queue.put(None)
 
     def token(self, token, **kwargs):
         self._token = token
