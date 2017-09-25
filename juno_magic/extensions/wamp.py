@@ -7,8 +7,6 @@ from twisted.internet.task import LoopingCall
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
 from twisted.internet.error import ConnectError, ConnectionLost
 
-from juno_magic.extensions.util import blockingCallFromThread
-
 from IPython.core.magic import (Magics, magics_class, line_magic,
                                 cell_magic, line_cell_magic)
 from IPython import get_ipython
@@ -27,9 +25,6 @@ from collections import defaultdict
 
 if sys.version_info >= (3, 0):
     unicode = str
-    import queue as Queue
-else:
-    import Queue
 
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 from autobahn.twisted.websocket import WampWebSocketClientProtocol
@@ -311,7 +306,6 @@ class JunoMagics(Magics):
         self._dispatcher = JunoCommDispatcher()
         self._interrupt_handler = InterruptHandler(self)
         self._wamp_err_handler = WampErrorDispatcher(self)
-        self._queue = Queue.Queue()
 
         if self._debug:
             try:
@@ -399,7 +393,7 @@ class JunoMagics(Magics):
                 _block = True
             args, extra = self._parser.parse_known_args(input_args)
             if _block:
-                result = blockingCallFromThread(reactor, args.fn, queue=self._queue,  cell=cell, **vars(args))
+                result = threads.blockingCallFromThread(reactor, args.fn, cell=cell, **vars(args))
                 return result
             else:
                 result = args.fn(cell=cell, **vars(args))
@@ -411,7 +405,9 @@ class JunoMagics(Magics):
             pass
 
     def interrupt(self):
-        self._queue.put(None)
+        for msg_id in status_msg_cache.keys():
+            status_msg_cache[msg_id].callback(True)
+            reactor.callLater(1.0, clean_status_cache, msg_id)
 
     def token(self, token, **kwargs):
         self._token = token
