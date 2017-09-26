@@ -47,6 +47,7 @@ import re
 from juno_magic.exception import *
 
 from jupyter_react import Component
+import signal
 
 JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/api/kernels/list")
 
@@ -286,6 +287,14 @@ def get_session_info(proto):
            }
     return msg
 
+def interrupt(*args):
+    for msg_id in status_msg_cache.keys():
+        status_msg_cache[msg_id].callback(True)
+        log.msg('interrupt called on sigint')
+        reactor.callLater(1.0, clean_status_cache, msg_id)
+
+signal.signal(signal.SIGINT, interrupt)
+
 @magics_class
 class JunoMagics(Magics):
     def __init__(self, shell):
@@ -393,7 +402,11 @@ class JunoMagics(Magics):
                 _block = True
             args, extra = self._parser.parse_known_args(input_args)
             if _block:
-                result = threads.blockingCallFromThread(reactor, args.fn, cell=cell, **vars(args))
+                try:
+                    result = threads.blockingCallFromThread(reactor, args.fn, cell=cell, **vars(args))
+                except KeyboardInterrupt:
+                    log.msg("caught kbi")
+                    return None
                 return result
             else:
                 result = args.fn(cell=cell, **vars(args))
@@ -403,11 +416,6 @@ class JunoMagics(Magics):
                     return result
         except SystemExit:
             pass
-
-    def interrupt(self):
-        for msg_id in status_msg_cache.keys():
-            status_msg_cache[msg_id].callback(True)
-            reactor.callLater(1.0, clean_status_cache, msg_id)
 
     def token(self, token, **kwargs):
         self._token = token
