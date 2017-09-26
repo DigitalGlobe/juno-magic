@@ -199,6 +199,8 @@ def build_bridge_class(magics_instance):
                 print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
             if not magics_instance._heartbeat.running:
                 magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
+            self._dispatcher = JunoCommDispatcher()
+            self.interrupt_handler = InterruptHandler(magics_instance, self._dispatcher)
             returnValue(None)
 
         @inlineCallbacks
@@ -220,14 +222,15 @@ class JunoCommDispatcher(Component):
         super(JunoCommDispatcher, self).__init__(target_name=module, **kwargs)
 
 class InterruptHandler(object):
-    def __init__(self, magic, **kwargs):
+    def __init__(self, magic, dispatcher, **kwargs):
         self.magic = magic
-        self.magic._dispatcher.on_msg(self._handle_msg)
+        self._dispatcher = dispatcher
+        self._dispatcher.on_msg(self._handle_msg)
 
     def _handle_msg(self, msg):
         data = msg['content']['data']
         if data.get('method', None) == 'interrupt':
-            self.magic.interrupt()
+            interrupt()
 
 class WampErrorDispatcher(object):
     exception = None
@@ -312,9 +315,9 @@ class JunoMagics(Magics):
         self._hb_interval = 5
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
-        self._dispatcher = JunoCommDispatcher()
-        self._interrupt_handler = InterruptHandler(self)
-        self._wamp_err_handler = WampErrorDispatcher(self)
+        #self._dispatcher = JunoCommDispatcher()
+        #self._interrupt_handler = InterruptHandler(self)
+        #self._wamp_err_handler = WampErrorDispatcher(self)
 
         if self._debug:
             try:
