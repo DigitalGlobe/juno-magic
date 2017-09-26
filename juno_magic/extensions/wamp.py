@@ -20,7 +20,7 @@ import os
 import sys
 import shlex
 import json
-from time import sleep
+import time
 from collections import defaultdict
 
 if sys.version_info >= (3, 0):
@@ -320,7 +320,7 @@ class JunoMagics(Magics):
             if token is None:
                 token = self._token
             self._sp = wampify(self._connection_file, "--wamp-url", wamp_url, "--token", token, _bg=True)
-            sleep(1)
+            time.sleep(1)
             if self._sp.process.is_alive():
                 print("Bridge Running")
             else:
