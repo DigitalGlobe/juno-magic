@@ -25,6 +25,9 @@ from collections import defaultdict
 
 if sys.version_info >= (3, 0):
     unicode = str
+    import queue as Queue
+else:
+    import Queue
 
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 from autobahn.twisted.websocket import WampWebSocketClientProtocol
@@ -55,6 +58,7 @@ MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
 
 status_msg_cache = defaultdict(Deferred)
+cache_pending = lambda x: status_msg_cache[x]
 clean_status_cache = lambda x: status_msg_cache.__delitem__(x)
 
 def publish_to_display(obj):
@@ -199,8 +203,6 @@ def build_bridge_class(magics_instance):
                 print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
             if not magics_instance._heartbeat.running:
                 magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
-            self._dispatcher = JunoCommDispatcher()
-            self.interrupt_handler = InterruptHandler(magics_instance, self._dispatcher)
             returnValue(None)
 
         @inlineCallbacks
@@ -216,32 +218,19 @@ def build_bridge_class(magics_instance):
 
     return WampConnectionComponent
 
-class JunoCommDispatcher(Component):
-    def __init__(self,  module='JunoMagic', **kwargs):
-        self._module = module
-        super(JunoCommDispatcher, self).__init__(target_name=module, **kwargs)
 
-class InterruptHandler(object):
-    def __init__(self, magic, dispatcher, **kwargs):
-        self.magic = magic
-        self._dispatcher = dispatcher
-        self._dispatcher.on_msg(self._handle_msg)
-
-    def _handle_msg(self, msg):
-        data = msg['content']['data']
-        if data.get('method', None) == 'interrupt':
-            interrupt()
-
-class WampErrorDispatcher(object):
+class WampErrorDispatcher(Component):
     exception = None
-    def __init__(self, magic, **kwargs):
+    def __init__(self, magic, module='JunoMagic', **kwargs):
         self.magic = magic
+        self._module = module
+        super(WampErrorDispatcher, self).__init__(target_name=module,  **kwargs)
 
     def __call__(self, failure):
         self.exception = failure
         if failure is not None:
             msg = self._format_msg(failure)
-            self.magic._dispatcher.send(msg)
+            self.send(msg)
 
     def _format_msg(self, msg):
         m = {'class': str(msg.__class__)}
@@ -278,7 +267,6 @@ def get_connection_error(proto):
             return MaxMessagePayloadSizeExceededError(proto.wasNotCleanReason)
         elif proto.wasNotCleanReason is not None:
             return ConnectError(proto.wasNotCleanReason)
-
     return None
 
 def get_session_info(proto):
@@ -290,13 +278,6 @@ def get_session_info(proto):
            }
     return msg
 
-def interrupt(*args):
-    for msg_id in status_msg_cache.keys():
-        status_msg_cache[msg_id].callback(True)
-        log.msg('interrupt called on sigint')
-        reactor.callLater(1.0, clean_status_cache, msg_id)
-
-signal.signal(signal.SIGINT, interrupt)
 
 @magics_class
 class JunoMagics(Magics):
@@ -315,9 +296,8 @@ class JunoMagics(Magics):
         self._hb_interval = 5
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
-        #self._dispatcher = JunoCommDispatcher()
-        #self._interrupt_handler = InterruptHandler(self)
-        #self._wamp_err_handler = WampErrorDispatcher(self)
+        self._queue = Queue.Queue()
+        self._wamp_err_handler = WampErrorDispatcher(self)
 
         if self._debug:
             try:
@@ -404,19 +384,28 @@ class JunoMagics(Magics):
                 input_args.insert(0, "execute")
                 _block = True
             args, extra = self._parser.parse_known_args(input_args)
+
             if _block:
                 try:
-                    result = threads.blockingCallFromThread(reactor, args.fn, cell=cell, **vars(args))
+                    d = args.fn(cell=cell, **vars(args))
+                    d.addCallback(cache_pending)
+                    d.addCallback(self._queue.put)
+                    while True:
+                        try:
+                            return self._queue.get(block=False)
+                        except Queue.Empty:
+                            time.sleep(0.01)
                 except KeyboardInterrupt:
-                    log.msg("caught kbi")
+                    for msg_id in status_msg_cache:
+                        clean_msg_cache(msg_id)
                     return None
-                return result
             else:
                 result = args.fn(cell=cell, **vars(args))
                 if isinstance(result, Deferred):
                     result.addCallback(lambda x: publish_to_display(x) if x is not None else "[muted]")
                 else:
                     return result
+
         except SystemExit:
             pass
 
@@ -591,14 +580,12 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def execute(self, cell, prefix=None, **kwargs):
-        log.msg('execute called')
         yield self.connect(self._router_url)
         if prefix is not None:
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
         else:
             output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
-        log.msg('output is {}'.format(output))
-        yield status_msg_cache[output]
+        returnValue(output)
 
     @inlineCallbacks
     def _ping(self):
