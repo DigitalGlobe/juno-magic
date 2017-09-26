@@ -588,11 +588,13 @@ class JunoMagics(Magics):
 
     @inlineCallbacks
     def execute(self, cell, prefix=None, **kwargs):
+        log.msg('execute called')
         yield self.connect(self._router_url)
         if prefix is not None:
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
         else:
             output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
+        log.msg('output is {}'.format(output))
         yield status_msg_cache[output]
 
     @inlineCallbacks
