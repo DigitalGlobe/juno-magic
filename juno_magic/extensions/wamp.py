@@ -377,6 +377,7 @@ class JunoMagics(Magics):
 
     @line_cell_magic
     def juno(self, line, cell=None):
+        log.msg("juno called")
         _block = False
         try:
             input_args = shlex.split(line)
@@ -386,21 +387,24 @@ class JunoMagics(Magics):
             args, extra = self._parser.parse_known_args(input_args)
 
             if _block:
+                log.msg("starting blocking execute")
                 try:
                     d = args.fn(cell=cell, **vars(args))
                     d.addCallback(cache_pending)
                     d.addCallback(self._queue.put)
                     while True:
+                        log.msg("in get loop")
                         try:
                             return self._queue.get(block=False)
                         except Queue.Empty:
-                            time.sleep(0.01)
+                            time.sleep(0.1)
                 except KeyboardInterrupt:
                     for msg_id in status_msg_cache:
                         clean_msg_cache(msg_id)
                     return None
             else:
                 result = args.fn(cell=cell, **vars(args))
+                log.msg("starting non-blocking call")
                 if isinstance(result, Deferred):
                     result.addCallback(lambda x: publish_to_display(x) if x is not None else "[muted]")
                 else:
@@ -492,6 +496,7 @@ class JunoMagics(Magics):
             yield self.set_connection(None)
 
         if self._ready_to_connect:
+            log.msg("making new connection!")
             self._connected = Deferred() # allocate a new deferred
             self._router_url = wamp_url
             _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
