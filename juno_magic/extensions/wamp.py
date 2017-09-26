@@ -389,6 +389,7 @@ class JunoMagics(Magics):
             if _block:
                 log.msg("starting blocking execute")
                 try:
+                    log.msg("CALLED: juno {}".format(args))
                     d = args.fn(cell=cell, **vars(args))
                     d.addCallback(cache_pending)
                     d.addCallback(self._queue.put)
