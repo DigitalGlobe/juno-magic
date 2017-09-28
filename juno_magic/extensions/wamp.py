@@ -25,6 +25,9 @@ from collections import defaultdict
 
 if sys.version.startswith("3"):
     unicode = str
+    import queue as Queue
+else:
+    import Queue
 
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 from autobahn.twisted.websocket import WampWebSocketClientProtocol
@@ -43,6 +46,7 @@ except ImportError:
 
 import requests
 import re
+import signal
 
 from juno_magic.exception import *
 
@@ -55,6 +59,40 @@ MAX_FRAME_PAYLOAD_SIZE = 0
 
 status_msg_cache = defaultdict(Deferred)
 clean_status_cache = lambda x: status_msg_cache.__delitem__(x)
+
+def blockingCallFromThread(reactor, f, queue=Queue.Queue(), *a, **kw):
+    """
+    Run a function in the reactor from a thread, and wait for the result
+    synchronously.  If the function returns a L{Deferred}, wait for its
+    result and return that.
+    @param reactor: The L{IReactorThreads} provider which will be used to
+        schedule the function call.
+    @param f: the callable to run in the reactor thread
+    @type f: any callable.
+    @param a: the arguments to pass to C{f}.
+    @param kw: the keyword arguments to pass to C{f}.
+    @return: the result of the L{Deferred} returned by C{f}, or the result
+        of C{f} if it returns anything other than a L{Deferred}.
+    @raise: If C{f} raises a synchronous exception,
+        C{blockingCallFromThread} will raise that exception.  If C{f}
+        returns a L{Deferred} which fires with a L{Failure},
+        C{blockingCallFromThread} will raise that failure's exception (see
+        L{Failure.raiseException}).
+    """
+    def _callFromThread():
+        result = defer.maybeDeferred(f, *a, **kw)
+        result.addBoth(queue.put)
+    reactor.callFromThread(_callFromThread)
+    while True:
+        log.msg("In queue.get loop")
+        try:
+            result = queue.get(block=False)
+            break
+        except  Queue.Empty:
+            time.sleep(0.1)
+    if isinstance(result, failure.Failure):
+        result.raiseException()
+    return result
 
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
@@ -274,6 +312,13 @@ def get_session_info(proto):
            }
     return msg
 
+def interrupt(*args):
+    for key in status_msg_cache.keys():
+        status_msg_cache[key].callback(None)
+        clean_status_cache(key)
+
+signal.signal(signal.SIGINT, interrupt)
+
 @magics_class
 class JunoMagics(Magics):
     def __init__(self, shell):
@@ -292,6 +337,7 @@ class JunoMagics(Magics):
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
         self._wamp_err_handler = WampErrorDispatcher(self)
+        self._queue = Queue.Queue()
 
         if self._debug:
             try:
@@ -378,7 +424,7 @@ class JunoMagics(Magics):
                 _block = True
             args, extra = self._parser.parse_known_args(input_args)
             if _block:
-                result = threads.blockingCallFromThread(reactor, args.fn, cell=cell, **vars(args))
+                result = blockingCallFromThread(reactor, args.fn, queue=self._queue, cell=cell, **vars(args))
                 return result
             else:
                 result = args.fn(cell=cell, **vars(args))
