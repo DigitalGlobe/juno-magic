@@ -424,8 +424,12 @@ class JunoMagics(Magics):
                 _block = True
             args, extra = self._parser.parse_known_args(input_args)
             if _block:
-                result = blockingCallFromThread(reactor, args.fn, queue=self._queue, cell=cell, **vars(args))
-                return result
+                try:
+                    result = blockingCallFromThread(reactor, args.fn, queue=self._queue, cell=cell, **vars(args))
+                    return result
+                except KeyboardInterrupt as ke:
+                    interrupt()
+                    raise ke
             else:
                 result = args.fn(cell=cell, **vars(args))
                 if isinstance(result, Deferred):
