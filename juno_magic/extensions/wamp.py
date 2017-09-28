@@ -84,12 +84,11 @@ def blockingCallFromThread(reactor, f, queue=Queue.Queue(), *a, **kw):
         result.addBoth(queue.put)
     reactor.callFromThread(_callFromThread)
     while True:
-        log.msg("In queue.get loop")
         try:
             result = queue.get(block=False)
             break
         except Queue.Empty:
-            time.sleep(0.1)
+            time.sleep(0)
     if isinstance(result, failure.Failure):
         result.raiseException()
     return result
@@ -424,6 +423,7 @@ class JunoMagics(Magics):
                 _block = True
             args, extra = self._parser.parse_known_args(input_args)
             if _block:
+                self._queue = Queue.Queue()
                 try:
                     result = blockingCallFromThread(reactor, args.fn, queue=self._queue, cell=cell, **vars(args))
                     return result
