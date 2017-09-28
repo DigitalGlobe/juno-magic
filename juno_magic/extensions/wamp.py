@@ -20,7 +20,7 @@ import os
 import sys
 import shlex
 import json
-from time import sleep
+import time
 from collections import defaultdict
 
 if sys.version.startswith("3"):
