@@ -2,9 +2,9 @@ from twisted.internet import reactor, threads
 from threading import Thread, Lock, Event, ThreadError
 _REACTOR_THREAD  = Thread(target=reactor.run, args=(False,))
 _REACTOR_THREAD.start()
-from twisted.python import log
+from twisted.python import log, failure
 from twisted.internet.task import LoopingCall
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
+from twisted.internet import inlineCallbacks, returnValue, Deferred, maybeDeferred, CancelledError
 from twisted.internet.error import ConnectError, ConnectionLost
 
 from IPython.core.magic import (Magics, magics_class, line_magic,
@@ -80,7 +80,7 @@ def blockingCallFromThread(reactor, f, queue=Queue.Queue(), *a, **kw):
         L{Failure.raiseException}).
     """
     def _callFromThread():
-        result = defer.maybeDeferred(f, *a, **kw)
+        result = maybeDeferred(f, *a, **kw)
         result.addBoth(queue.put)
     reactor.callFromThread(_callFromThread)
     while True:
@@ -88,7 +88,7 @@ def blockingCallFromThread(reactor, f, queue=Queue.Queue(), *a, **kw):
         try:
             result = queue.get(block=False)
             break
-        except  Queue.Empty:
+        except Queue.Empty:
             time.sleep(0.1)
     if isinstance(result, failure.Failure):
         result.raiseException()
