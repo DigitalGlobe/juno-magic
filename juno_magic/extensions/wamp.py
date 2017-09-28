@@ -4,7 +4,7 @@ _REACTOR_THREAD  = Thread(target=reactor.run, args=(False,))
 _REACTOR_THREAD.start()
 from twisted.python import log, failure
 from twisted.internet.task import LoopingCall
-from twisted.internet import inlineCallbacks, returnValue, Deferred, maybeDeferred, CancelledError
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, maybeDeferred, CancelledError
 from twisted.internet.error import ConnectError, ConnectionLost
 
 from IPython.core.magic import (Magics, magics_class, line_magic,
