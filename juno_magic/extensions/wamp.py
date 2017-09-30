@@ -58,9 +58,10 @@ MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
 
 status_msg_cache = defaultdict(Deferred)
+error_msg_cache = defaultdict(Deferred)
 clean_status_cache = lambda x: status_msg_cache.__delitem__(x)
 
-def blockingCallFromThread(reactor, f, queue=Queue.Queue(), *a, **kw):
+def blockingCallFromThread(reactor, f, magic, *a, **kw):
     """
     Run a function in the reactor from a thread, and wait for the result
     synchronously.  If the function returns a L{Deferred}, wait for its
@@ -81,12 +82,21 @@ def blockingCallFromThread(reactor, f, queue=Queue.Queue(), *a, **kw):
     """
     def _callFromThread():
         result = maybeDeferred(f, *a, **kw)
-        result.addBoth(queue.put)
+        result.addBoth(magic._queue.put)
     reactor.callFromThread(_callFromThread)
-    while True:
-        try:
-            result = queue.get(block=False)
-            break
+
+    def _call():
+        result = magic._queue.get(timeout=120)
+        return result
+
+    try:
+        result = _call()
+    except Queue.Empty:
+        magic._notify_hanging_execute()
+        while True:
+            try:
+                result = queue.get(block=False)
+                break
         except Queue.Empty:
             time.sleep(0)
     if isinstance(result, failure.Failure):
@@ -105,6 +115,11 @@ def build_display_data(obj):
     if "_repr_javascript_" in methods:
         output["application/javascript"] = obj._repr_javascript_()
     return output
+
+def handle_error_msg(msg):
+    parent_id = msg["parent_header"]["msg_id"]
+    if msg["content"]["ename"] == "KeyboardInterrupt":
+        error_msg_cache[parent_id].callback(True)
 
 def handle_iopub_msg(msg):
     parent_id = msg["parent_header"]["msg_id"]
@@ -174,6 +189,8 @@ def build_bridge_class(magics_instance):
 
         def on_iopub(self, msg):
             if msg["msg_type"] == "error":
+                if msg["ename"] == "KeyboardInterrupt":
+                    handle_error_msg(msg)
                 publish_display_data({"text/plain": "{} - {}\n{}".format(msg["content"]["ename"],
                                                                          msg["content"]["evalue"],
                                                                          "\n".join(msg["content"]["traceback"]))},
@@ -316,8 +333,6 @@ def interrupt(*args):
         status_msg_cache[key].callback(None)
         clean_status_cache(key)
 
-signal.signal(signal.SIGINT, interrupt)
-
 @magics_class
 class JunoMagics(Magics):
     def __init__(self, shell):
@@ -337,6 +352,7 @@ class JunoMagics(Magics):
         self._debug = True
         self._wamp_err_handler = WampErrorDispatcher(self)
         self._queue = Queue.Queue()
+        self._last_msg_id = None
 
         if self._debug:
             try:
@@ -426,10 +442,11 @@ class JunoMagics(Magics):
                 self._queue = Queue.Queue()
                 try:
                     result = blockingCallFromThread(reactor, args.fn, queue=self._queue, cell=cell, **vars(args))
+                    self._last_msg_id = None
                     return result
                 except KeyboardInterrupt as ke:
                     interrupt()
-                    raise ke
+                    reactor.callLater(5.0, self._interruption_status_handler, self._last_msg_id)
             else:
                 result = args.fn(cell=cell, **vars(args))
                 if isinstance(result, Deferred):
@@ -438,6 +455,15 @@ class JunoMagics(Magics):
                     return result
         except SystemExit:
             pass
+
+    def _interruption_status_handler(self, msg_id):
+        if msg_id is not None and not error_msg_cache[msg_id].called:
+            self._error_dispatcher.notify_interrupt_failure(msg_id)
+        error_msg_cache.__delitem__(msg_id)
+
+    def _execution_status_handler(self, msg_id):
+        if msg_id if not None:
+            self._error_dispatcher.notify_hanging_execute(msg_id)
 
     def token(self, token, **kwargs):
         self._token = token
@@ -615,6 +641,7 @@ class JunoMagics(Magics):
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
         else:
             output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
+        self._last_msg_id = output
         yield status_msg_cache[output]
 
 
