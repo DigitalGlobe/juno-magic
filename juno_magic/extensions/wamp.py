@@ -1,10 +1,10 @@
 from twisted.internet import reactor, threads
-from threading import Thread, Lock, Event, ThreadError
+from threading import Thread
 _REACTOR_THREAD  = Thread(target=reactor.run, args=(False,))
 _REACTOR_THREAD.start()
-from twisted.python import log, failure
+from twisted.python import log
 from twisted.internet.task import LoopingCall
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, maybeDeferred, CancelledError
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.error import ConnectError, ConnectionLost
 
 from IPython.core.magic import (Magics, magics_class, line_magic,
@@ -20,10 +20,9 @@ import os
 import sys
 import shlex
 import json
-import time
 from collections import defaultdict
 
-if sys.version.startswith("3"):
+if sys.version_info >= (3, 0):
     unicode = str
     import queue as Queue
 else:
@@ -46,9 +45,9 @@ except ImportError:
 
 import requests
 import re
-import signal
 
 from juno_magic.exception import *
+from juno_magic.extensions.util import blockingCallFromThread
 
 from jupyter_react import Component
 
@@ -60,58 +59,6 @@ MAX_FRAME_PAYLOAD_SIZE = 0
 status_msg_cache = defaultdict(Deferred)
 error_msg_cache = defaultdict(Deferred)
 clean_status_cache = lambda x: status_msg_cache.__delitem__(x)
-
-def blockingCallFromThread(reactor, f, queue=Queue.Queue(), timeout=120, timeout_handler=None,  *a, **kw):
-    """
-    Adapted from twisted's twisted.internet.threads.blockingCallFromThread
-    to optionally pass a queue, a timeout, and a timeout handler.
-
-    Run a function in the reactor from a thread, and wait for the result
-    synchronously.  If the function returns a L{Deferred}, wait for its
-    result and return that. If timeout_handler is a callable, call
-    timeout_handler once if we wait longer than timeout, then continue waiting.
-    @param reactor: The L{IReactorThreads} provider which will be used to
-        schedule the function call.
-    @param f: the callable to run in the reactor thread
-    @type f: any callable.
-    @param queue: a standard python queue, should be empty when passed
-    @type queue: Queue.Queue
-    @param timeout: time to wait before calling timeout_handler, if given.
-    @type timeout: integer
-    @param timeout_handler: a function to call if we wait longer than timeout.
-    @type: any callable
-    @param a: the arguments to pass to C{f}.
-    @param kw: the keyword arguments to pass to C{f}.
-    @return: the result of the L{Deferred} returned by C{f}, or the result
-        of C{f} if it returns anything other than a L{Deferred}.
-    @raise: If C{f} raises a synchronous exception,
-        C{blockingCallFromThread} will raise that exception.  If C{f}
-        returns a L{Deferred} which fires with a L{Failure},
-        C{blockingCallFromThread} will raise that failure's exception (see
-        L{Failure.raiseException}).
-    """
-    def _callFromThread():
-        result = maybeDeferred(f, *a, **kw)
-        result.addBoth(queue.put)
-
-    reactor.callFromThread(_callFromThread)
-
-    try:
-        result = queue.get(timeout=timeout)
-    except Queue.Empty:
-        if callable(timeout_handler):
-            timeout_handler()
-        while True:
-            try:
-                result = queue.get(timeout=timeout)
-                break
-            except Queue.Empty:
-                pass
-
-    if isinstance(result, failure.Failure):
-        result.raiseException()
-
-    return result
 
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
