@@ -61,15 +61,25 @@ status_msg_cache = defaultdict(Deferred)
 error_msg_cache = defaultdict(Deferred)
 clean_status_cache = lambda x: status_msg_cache.__delitem__(x)
 
-def blockingCallFromThread(reactor, f, magic, *a, **kw):
+def blockingCallFromThread(reactor, f, queue=Queue.Queue(), timeout=120, timeout_handler=None,  *a, **kw):
     """
+    Adapted from twisted's twisted.internet.threads.blockingCallFromThread
+    to optionally pass a queue, a timeout, and a timeout handler.
+
     Run a function in the reactor from a thread, and wait for the result
     synchronously.  If the function returns a L{Deferred}, wait for its
-    result and return that.
+    result and return that. If timeout_handler is a callable, call
+    timeout_handler once if we wait longer than timeout, then continue waiting.
     @param reactor: The L{IReactorThreads} provider which will be used to
         schedule the function call.
     @param f: the callable to run in the reactor thread
     @type f: any callable.
+    @param queue: a standard python queue, should be empty when passed
+    @type queue: Queue.Queue
+    @param timeout: time to wait before calling timeout_handler, if given.
+    @type timeout: integer
+    @param timeout_handler: a function to call if we wait longer than timeout.
+    @type: any callable
     @param a: the arguments to pass to C{f}.
     @param kw: the keyword arguments to pass to C{f}.
     @return: the result of the L{Deferred} returned by C{f}, or the result
@@ -82,25 +92,25 @@ def blockingCallFromThread(reactor, f, magic, *a, **kw):
     """
     def _callFromThread():
         result = maybeDeferred(f, *a, **kw)
-        result.addBoth(magic._queue.put)
+        result.addBoth(queue.put)
+
     reactor.callFromThread(_callFromThread)
 
-    def _call():
-        result = magic._queue.get(timeout=120)
-        return result
-
     try:
-        result = _call()
+        result = queue.get(timeout=timeout)
     except Queue.Empty:
-        magic._notify_hanging_execute()
+        if callable(timeout_handler):
+            timeout_handler()
         while True:
             try:
-                result = queue.get(block=False)
+                result = queue.get(timeout=timeout)
                 break
-        except Queue.Empty:
-            time.sleep(0)
+            except Queue.Empty:
+                pass
+
     if isinstance(result, failure.Failure):
         result.raiseException()
+
     return result
 
 def publish_to_display(obj):
@@ -189,8 +199,7 @@ def build_bridge_class(magics_instance):
 
         def on_iopub(self, msg):
             if msg["msg_type"] == "error":
-                if msg["ename"] == "KeyboardInterrupt":
-                    handle_error_msg(msg)
+                handle_error_msg(msg)
                 publish_display_data({"text/plain": "{} - {}\n{}".format(msg["content"]["ename"],
                                                                          msg["content"]["evalue"],
                                                                          "\n".join(msg["content"]["traceback"]))},
@@ -441,12 +450,14 @@ class JunoMagics(Magics):
             if _block:
                 self._queue = Queue.Queue()
                 try:
-                    result = blockingCallFromThread(reactor, args.fn, queue=self._queue, cell=cell, **vars(args))
+                    result = blockingCallFromThread(reactor, args.fn, queue=self._queue, timeout=120, timeout_handler=self._error_dispatcher.on_long_running_execute,
+                                                    cell=cell, **vars(args))
                     self._last_msg_id = None
                     return result
                 except KeyboardInterrupt as ke:
+                    last_msg_id = self._last_msg_id
                     interrupt()
-                    reactor.callLater(5.0, self._interruption_status_handler, self._last_msg_id)
+                    reactor.callLater(5.0, self._interruption_status_handler, last_msg_id)
             else:
                 result = args.fn(cell=cell, **vars(args))
                 if isinstance(result, Deferred):
