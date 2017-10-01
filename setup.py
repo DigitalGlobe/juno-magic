@@ -32,7 +32,7 @@ setup(name='juno-magic',
       author='Pramukta Kumar',
       author_email='pramukta.kumar@timbr.io',
       license='MIT',
-      packages=['juno_magic', 'juno_magic.extensions'],
+      packages=['juno_magic', 'juno_magic.extensions', 'juno_magic.util'],
       zip_safe=False,
       data_files=[
         ('share/jupyter/nbextensions/juno_magic', [
