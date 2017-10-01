@@ -46,10 +46,9 @@ except ImportError:
 import requests
 import re
 
-from juno_magic.exception import *
-from juno_magic.extensions.util import blockingCallFromThread
-
-from jupyter_react import Component
+from juno_magic.util.threads import blockingCallFromThread
+from juno_magic.util.wamp import get_session_info, cleanup_session
+from juno_magic.extensions.comms import WampEventDispatcher, KernelEventDispatcher
 
 JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/api/kernels/list")
 
@@ -58,7 +57,16 @@ MAX_FRAME_PAYLOAD_SIZE = 0
 
 status_msg_cache = defaultdict(Deferred)
 error_msg_cache = defaultdict(Deferred)
-clean_status_cache = lambda x: status_msg_cache.__delitem__(x)
+
+def clean_cache(cache, key=None):
+    if key is None:
+        for k in cache.keys():
+            cache.__delitem__(k)
+    else:
+        try:
+            cache.__delitem__(key)
+        except KeyError:
+            pass
 
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
@@ -73,16 +81,13 @@ def build_display_data(obj):
         output["application/javascript"] = obj._repr_javascript_()
     return output
 
-def handle_error_msg(msg):
-    parent_id = msg["parent_header"]["msg_id"]
-    if msg["content"]["ename"] == "KeyboardInterrupt":
-        error_msg_cache[parent_id].callback(True)
-
 def handle_iopub_msg(msg):
     parent_id = msg["parent_header"]["msg_id"]
     if msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":
         status_msg_cache[parent_id].callback(True)
-        reactor.callLater(1.0, clean_status_cache, parent_id)
+        reactor.callLater(1.0, clean_cache, status_msg_cache, key=parent_id)
+    elif msg["content"]["ename"] == "KeyboardInterrupt":
+        error_msg_cache[parent_id].callback(True)
 
 def handle_comm_open(msg):
     comm_manager = get_ipython().kernel.comm_manager
@@ -146,7 +151,7 @@ def build_bridge_class(magics_instance):
 
         def on_iopub(self, msg):
             if msg["msg_type"] == "error":
-                handle_error_msg(msg)
+                handle_iopub_msg(msg)
                 publish_display_data({"text/plain": "{} - {}\n{}".format(msg["content"]["ename"],
                                                                          msg["content"]["evalue"],
                                                                          "\n".join(msg["content"]["traceback"]))},
@@ -214,7 +219,7 @@ def build_bridge_class(magics_instance):
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
-            magics_instance._wamp_err_handler(details)
+            magics_instance._wamp_event_dispatcher(details)
             res =  yield super(WampConnectionComponent, self).onLeave(details)
             returnValue(res)
 
@@ -224,70 +229,10 @@ def build_bridge_class(magics_instance):
     return WampConnectionComponent
 
 
-class WampErrorDispatcher(Component):
-    exception = None
-    def __init__(self, magic, module='JunoMagic', **kwargs):
-        self.magic = magic
-        self._module = module
-        super(WampErrorDispatcher, self).__init__(target_name=module,  **kwargs)
-
-    def __call__(self, failure):
-        self.exception = failure
-        if failure is not None:
-            msg = self._format_msg(failure)
-            self.send(msg)
-
-    def _format_msg(self, msg):
-        m = {'class': str(msg.__class__)}
-        m.update(self.magic.wamp_config)
-        m['details'] = str(msg)
-        if self.magic._has_protocol:
-            m.update(get_session_info(self.magic._wamp_runner))
-        return m
-
-def cleanup(proto):
-    if hasattr(proto, '_session') and proto._session is not None:
-        if proto._session.is_attached():
-            return proto._session.leave()
-        elif proto._session.is_connected():
-            return proto._session.disconnect()
-
-def get_connection_error(proto):
-    if proto is not None and not proto.wasClean:
-        if proto.wasCloseHandshakeTimeout:
-            return CloseHandshakeError(proto.wasNotCleanReason)
-        elif proto.wasMaxFramePayloadSizeExceeded:
-            return MaxFramePayloadSizeExceededError(proto.wasNotCleanReason)
-        elif proto.wasMaxMessagePayloadSizeExceeded:
-            return MaxMessagePayloadSizeExceededError(proto.wasNotCleanReason)
-        elif proto.wasOpenHandshakeTimeout:
-            return OpenHandshakeTimeoutError(proto.wasNotCleanReason)
-        elif proto.wasServerConnectionDropTimeout:
-            return ServerConnectionDropTimeout(proto.wasNotCleanReason)
-        elif proto.wasServingFlashSocketPolicyFile:
-            return ServingFlashSocketPolicyFileError(proto.wasNotCleanReason)
-        elif proto.wasMaxFramePayloadSizeExceeded:
-            return MaxFramePayloadSizeExceededError(proto.wasNotCleanReason)
-        elif proto.wasMaxMessagePayloadSizeExceeded:
-            return MaxMessagePayloadSizeExceededError(proto.wasNotCleanReason)
-        elif proto.wasNotCleanReason is not None:
-            return ConnectError(proto.wasNotCleanReason)
-
-    return None
-
-def get_session_info(proto):
-    msg = {"session_info": {"was_clean": proto.wasClean,
-                            "reason_not_clean": proto.wasNotCleanReason,
-                            "closed_by_me": proto.closedByMe,
-                            "dropped_by_me": proto.droppedByMe,
-                            "failed_by_me": proto.failedByMe}
-           }
-    return msg
-
-def interrupt(*args):
+def on_interrupt(*args):
     for key in status_msg_cache.keys():
         status_msg_cache[key].callback(None)
-        clean_status_cache(key)
+        clean_cache(status_msg_cache, key=key)
 
 @magics_class
 class JunoMagics(Magics):
@@ -306,7 +251,10 @@ class JunoMagics(Magics):
         self._hb_interval = 5
         self._heartbeat = LoopingCall(self._ping)
         self._debug = True
-        self._wamp_err_handler = WampErrorDispatcher(self)
+        self._wamp_event_dispatcher = WampEventDispatcher(self)
+        self._kernel_event_dispatcher = KernelEventDispatcher()
+        self._interrupt_timeout = 5.0 # Wait time before notifying interrupt failure
+        self._execute_timeout = 120 # Wait time before notifying long running execution
         self._queue = Queue.Queue()
         self._last_msg_id = None
 
@@ -397,14 +345,15 @@ class JunoMagics(Magics):
             if _block:
                 self._queue = Queue.Queue()
                 try:
-                    result = blockingCallFromThread(reactor, args.fn, queue=self._queue, timeout=120, timeout_handler=self._error_dispatcher.on_long_running_execute,
-                                                    cell=cell, **vars(args))
                     self._last_msg_id = None
+                    result = blockingCallFromThread(reactor, args.fn, queue=self._queue, timeout=self._execute_timeout,
+                                                    timeout_handler=self._handle_execute_status,
+                                                    cell=cell, **vars(args))
                     return result
                 except KeyboardInterrupt as ke:
                     last_msg_id = self._last_msg_id
-                    interrupt()
-                    reactor.callLater(5.0, self._interruption_status_handler, last_msg_id)
+                    on_interrupt()
+                    reactor.callLater(self._interrupt_timeout, self._handle_interrupt_status, last_msg_id)
             else:
                 result = args.fn(cell=cell, **vars(args))
                 if isinstance(result, Deferred):
@@ -414,14 +363,14 @@ class JunoMagics(Magics):
         except SystemExit:
             pass
 
-    def _interruption_status_handler(self, msg_id):
+    def _handle_interrupt_status(self, msg_id):
         if msg_id is not None and not error_msg_cache[msg_id].called:
-            self._error_dispatcher.notify_interrupt_failure(msg_id)
-        error_msg_cache.__delitem__(msg_id)
+            self._kernel_event_dispatcher.on_interrupt_fail(self._interrupt_timeout, msg_id)
+        clean_cache(error_msg_cache, key=msg_id)
 
-    def _execution_status_handler(self, msg_id):
+    def _handle_execute_status(self):
         if msg_id if not None:
-            self._error_dispatcher.notify_hanging_execute(msg_id)
+            self._kernel_event_dispatcher.on_long_running_execute(self._execute_timeout, self._last_msg_id)
 
     def token(self, token, **kwargs):
         self._token = token
@@ -485,9 +434,8 @@ class JunoMagics(Magics):
             if self._heartbeat.running:
                 self._heartbeat.stop()
             if do_cleanup:
-                res = yield cleanup(self._wamp_runner)
-                e = get_connection_error(self._wamp_runner)
-                self._wamp_err_handler(e)
+                res = yield cleanup_session(self._wamp_runner)
+                self._wamp_event_dispatcher()
             self._wamp = wamp_connection
             self._wamp_runner = None
             self._connected = None
@@ -514,7 +462,7 @@ class JunoMagics(Magics):
                 self._wamp_runner.maxMessagePayloadSize = MAX_MESSAGE_PAYLOAD_SIZE
                 self._wamp_runner.maxFramePayloadSize = MAX_FRAME_PAYLOAD_SIZE
             except Exception as e:
-                self._wamp_err_handler(e)
+                self._wamp_event_dispatcher(e)
                 yield self.set_connection(None)
             else:
                 log.msg("Connecting to router: {}".format(self._router_url))
