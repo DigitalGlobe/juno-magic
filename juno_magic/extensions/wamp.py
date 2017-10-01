@@ -21,6 +21,7 @@ import sys
 import shlex
 import json
 from collections import defaultdict
+from functools import partial
 
 if sys.version_info >= (3, 0):
     unicode = str
@@ -56,7 +57,6 @@ MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
 
 status_msg_cache = defaultdict(Deferred)
-error_msg_cache = defaultdict(Deferred)
 
 def clean_cache(cache, key=None):
     if key is None:
@@ -86,8 +86,6 @@ def handle_iopub_msg(msg):
     if msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":
         status_msg_cache[parent_id].callback(True)
         reactor.callLater(1.0, clean_cache, status_msg_cache, key=parent_id)
-    elif msg["content"]["ename"] == "KeyboardInterrupt":
-        error_msg_cache[parent_id].callback(True)
 
 def handle_comm_open(msg):
     comm_manager = get_ipython().kernel.comm_manager
@@ -151,7 +149,6 @@ def build_bridge_class(magics_instance):
 
         def on_iopub(self, msg):
             if msg["msg_type"] == "error":
-                handle_iopub_msg(msg)
                 publish_display_data({"text/plain": "{} - {}\n{}".format(msg["content"]["ename"],
                                                                          msg["content"]["evalue"],
                                                                          "\n".join(msg["content"]["traceback"]))},
@@ -234,6 +231,10 @@ def on_interrupt(*args):
         status_msg_cache[key].callback(None)
         clean_cache(status_msg_cache, key=key)
 
+@inlineCallbacks
+def wait_for_idle(msg_id=None):
+    yield status_msg_cache[msg_id]
+
 @magics_class
 class JunoMagics(Magics):
     def __init__(self, shell):
@@ -253,7 +254,7 @@ class JunoMagics(Magics):
         self._debug = True
         self._wamp_event_dispatcher = WampEventDispatcher(self)
         self._kernel_event_dispatcher = KernelEventDispatcher()
-        self._interrupt_timeout = 5.0 # Wait time before notifying interrupt failure
+        self._interrupt_timeout = 5 # Wait time before notifying interrupt failure
         self._execute_timeout = 120 # Wait time before notifying long running execution
         self._queue = Queue.Queue()
         self._last_msg_id = None
@@ -351,9 +352,8 @@ class JunoMagics(Magics):
                                                     cell=cell, **vars(args))
                     return result
                 except KeyboardInterrupt as ke:
-                    last_msg_id = self._last_msg_id
-                    on_interrupt()
-                    reactor.callLater(self._interrupt_timeout, self._handle_interrupt_status, last_msg_id)
+                    result = blockingCallFromThread(reactor, self._wait_fn, timeout=self._interrupt_timeout,
+                                                    timeout_handler=self._handle_interrupt_status)
             else:
                 result = args.fn(cell=cell, **vars(args))
                 if isinstance(result, Deferred):
@@ -363,10 +363,9 @@ class JunoMagics(Magics):
         except SystemExit:
             pass
 
-    def _handle_interrupt_status(self, msg_id):
-        if msg_id is not None and not error_msg_cache[msg_id].called:
-            self._kernel_event_dispatcher.on_interrupt_fail(self._interrupt_timeout, msg_id)
-        clean_cache(error_msg_cache, key=msg_id)
+    def _handle_interrupt_status(self, msg_id="whatever"):
+        self._kernel_event_dispatcher.on_interrupt_fail(self._interrupt_timeout, msg_id)
+        on_interrupt()
 
     def _handle_execute_status(self):
         if self._last_msg_id is not None:
@@ -548,7 +547,8 @@ class JunoMagics(Magics):
         else:
             output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
         self._last_msg_id = output
-        yield status_msg_cache[output]
+        self._wait_fn = partial(wait_for_idle, msg_id=output)
+        yield self._wait_fn()
 
 
     @inlineCallbacks
