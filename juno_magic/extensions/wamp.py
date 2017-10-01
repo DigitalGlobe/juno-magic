@@ -369,7 +369,7 @@ class JunoMagics(Magics):
         clean_cache(error_msg_cache, key=msg_id)
 
     def _handle_execute_status(self):
-        if msg_id is not None:
+        if self._last_msg_id is not None:
             self._kernel_event_dispatcher.on_long_running_execute(self._execute_timeout, self._last_msg_id)
 
     def token(self, token, **kwargs):
