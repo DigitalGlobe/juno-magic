@@ -345,8 +345,9 @@ class JunoMagics(Magics):
             args, extra = self._parser.parse_known_args(input_args)
             if _block:
                 self._queue = Queue.Queue()
+                self._last_msg_id = None
+                self._wait_fn = lambda: True
                 try:
-                    self._last_msg_id = None
                     result = blockingCallFromThread(reactor, args.fn, queue=self._queue, timeout=self._execute_timeout,
                                                     timeout_handler=self._handle_execute_status,
                                                     cell=cell, **vars(args))
