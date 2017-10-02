@@ -57,6 +57,7 @@ MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
 
 status_msg_cache = defaultdict(Deferred)
+idle_d = Deferred()
 
 def clean_cache(cache, key=None):
     if key is None:
@@ -85,6 +86,7 @@ def handle_iopub_msg(msg):
     parent_id = msg["parent_header"]["msg_id"]
     if msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":
         status_msg_cache[parent_id].callback(True)
+        idle_d.callback(True)
         reactor.callLater(1.0, clean_cache, status_msg_cache, key=parent_id)
 
 def handle_comm_open(msg):
@@ -230,10 +232,11 @@ def on_interrupt(*args):
     for key in status_msg_cache.keys():
         status_msg_cache[key].callback(None)
         clean_cache(status_msg_cache, key=key)
+    idle_d.callback(None)
 
 @inlineCallbacks
 def wait_for_idle(msg_id=None):
-    yield status_msg_cache[msg_id]
+    yield idle_d
 
 @magics_class
 class JunoMagics(Magics):
