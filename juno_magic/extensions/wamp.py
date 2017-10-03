@@ -4,7 +4,7 @@ _REACTOR_THREAD  = Thread(target=reactor.run, args=(False,))
 _REACTOR_THREAD.start()
 from twisted.python import log
 from twisted.internet.task import LoopingCall
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, AlreadyCalledError
 from twisted.internet.error import ConnectError, ConnectionLost
 
 from IPython.core.magic import (Magics, magics_class, line_magic,
@@ -56,6 +56,8 @@ JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/
 MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
 
+global status_msg_cache
+global idle_d
 status_msg_cache = defaultdict(Deferred)
 idle_d = Deferred()
 
@@ -232,11 +234,17 @@ def on_interrupt(*args):
     for key in status_msg_cache.keys():
         status_msg_cache[key].callback(None)
         clean_cache(status_msg_cache, key=key)
-    idle_d.callback(None)
+    try:
+        idle_d.callback(None)
+    except AlreadyCalledError:
+        pass
 
 @inlineCallbacks
 def wait_for_idle(msg_id=None):
-    yield idle_d
+    if not msd_id:
+        yield idle_d
+    else:
+        yield status_msg_cache[msg_id]
 
 @magics_class
 class JunoMagics(Magics):
@@ -349,7 +357,7 @@ class JunoMagics(Magics):
             if _block:
                 self._queue = Queue.Queue()
                 self._last_msg_id = None
-                self._wait_fn = lambda: True
+                self._wait_fn = wait_for_idle
                 try:
                     result = blockingCallFromThread(reactor, args.fn, queue=self._queue, timeout=self._execute_timeout,
                                                     timeout_handler=self._handle_execute_status,
@@ -551,8 +559,7 @@ class JunoMagics(Magics):
         else:
             output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
         self._last_msg_id = output
-        self._wait_fn = partial(wait_for_idle, msg_id=output)
-        yield self._wait_fn()
+        yield self._wait_fn(msg_id=output)
 
 
     @inlineCallbacks
