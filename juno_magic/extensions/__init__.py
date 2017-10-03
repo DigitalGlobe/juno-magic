@@ -6,7 +6,7 @@ def load_ipython_extension(ip):
 def _jupyter_nbextension_paths():
     return [{
         'section': 'notebook',
-        'src': '/Users/jamiepolackwich1/juno-magic/static',
-        'dest': '/Users/jamiepolackwich1/juno_magic',
-        'require': '/Users/jamiepolackwich1/juno_magic/index'
+        'src': 'static',
+        'dest': 'juno_magic',
+        'require': 'juno_magic/index'
     }]

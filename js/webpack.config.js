@@ -31,14 +31,14 @@ module.exports = [{
   entry: './src/index.js',
   output: {
     filename: 'index.js',
-    path: '/Users/jamiepolackwich1/juno_magic/static',
+    path: '../juno_magic/static',
     libraryTarget: 'amd'
   },
   module: {
     loaders : [{
       test: /\.js$/,
       exclude: /(node_modules|react\-machine)/,
-      loaders: [`babel-loader?${JSON.stringify( babelSettings )}`]
+      loaders: [`babel?${JSON.stringify( babelSettings )}`]
     }, {
       test: /\.css$/,
       exclude: /node_modules/,
