@@ -2,7 +2,7 @@ from twisted.internet import reactor, threads
 from threading import Thread
 _REACTOR_THREAD  = Thread(target=reactor.run, args=(False,))
 _REACTOR_THREAD.start()
-from twisted.python import log
+from twisted.python import log, failure
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, AlreadyCalledError
 from twisted.internet.error import ConnectError, ConnectionLost
@@ -47,7 +47,6 @@ except ImportError:
 import requests
 import re
 
-from juno_magic.util.threads import blockingCallFromThread
 from juno_magic.util.wamp import get_session_info, cleanup_session
 from juno_magic.extensions.comms import WampEventDispatcher, KernelEventDispatcher
 
@@ -60,6 +59,58 @@ global status_msg_cache
 global idle_d
 status_msg_cache = defaultdict(Deferred)
 idle_d = Deferred()
+
+def blockingCallFromThread(reactor, f, queue=Queue.Queue(), timeout=120, timeout_handler=None,  *a, **kw):
+    """
+    Adapted from twisted's twisted.internet.threads.blockingCallFromThread
+    to optionally pass a queue, a timeout, and a timeout handler.
+    Run a function in the reactor from a thread, and wait for the result
+    synchronously.  If the function returns a L{Deferred}, wait for its
+    result and return that. If timeout_handler is a callable, call
+    timeout_handler once if we wait longer than timeout, then continue waiting.
+    @param reactor: The L{IReactorThreads} provider which will be used to
+        schedule the function call.
+    @param f: the callable to run in the reactor thread
+    @type f: any callable.
+    @param queue: a standard python queue, should be empty when passed
+    @type queue: Queue.Queue
+    @param timeout: time to wait before calling timeout_handler, if given.
+    @type timeout: integer
+    @param timeout_handler: a function to call if we wait longer than timeout.
+    @type: any callable
+    @param a: the arguments to pass to C{f}.
+    @param kw: the keyword arguments to pass to C{f}.
+    @return: the result of the L{Deferred} returned by C{f}, or the result
+        of C{f} if it returns anything other than a L{Deferred}.
+    @raise: If C{f} raises a synchronous exception,
+        C{blockingCallFromThread} will raise that exception.  If C{f}
+        returns a L{Deferred} which fires with a L{Failure},
+        C{blockingCallFromThread} will raise that failure's exception (see
+        L{Failure.raiseException}).
+    """
+    log.msg("in blocking call")
+    def _callFromThread():
+        result = maybeDeferred(f, *a, **kw)
+        result.addBoth(queue.put)
+
+    reactor.callFromThread(_callFromThread)
+
+    try:
+        result = queue.get(timeout=timeout)
+    except Queue.Empty:
+        if callable(timeout_handler):
+            timeout_handler()
+        while True:
+            try:
+                result = queue.get(timeout=timeout)
+                break
+            except Queue.Empty:
+                pass
+
+    if isinstance(result, failure.Failure):
+        result.raiseException()
+
+    return result
 
 def clean_cache(cache, key=None):
     if key is None:
@@ -469,7 +520,9 @@ class JunoMagics(Magics):
             self._router_url = wamp_url
             _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
             try:
+                log.msg("before running wamp app")
                 self._wamp_runner = yield _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
+                log.msg("after running wamp app")
                 self._wamp_runner.maxMessagePayloadSize = MAX_MESSAGE_PAYLOAD_SIZE
                 self._wamp_runner.maxFramePayloadSize = MAX_FRAME_PAYLOAD_SIZE
             except Exception as e:
