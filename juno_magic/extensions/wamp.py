@@ -1,10 +1,10 @@
 from twisted.internet import reactor, threads
-from threading import Thread
-_REACTOR_THREAD  = Thread(target=reactor.run, args=(False,))
-_REACTOR_THREAD.start()
+#from threading import Thread
+#_REACTOR_THREAD  = Thread(target=reactor.run, args=(False,))
+#_REACTOR_THREAD.start()
 from twisted.python import log, failure
 from twisted.internet.task import LoopingCall
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, AlreadyCalledError
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, maybeDeferred, AlreadyCalledError
 from twisted.internet.error import ConnectError, ConnectionLost
 
 from IPython.core.magic import (Magics, magics_class, line_magic,
