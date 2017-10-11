@@ -241,7 +241,7 @@ def on_interrupt(*args):
 
 @inlineCallbacks
 def wait_for_idle(msg_id=None):
-    if not msd_id:
+    if not msg_id:
         yield idle_d
     else:
         yield status_msg_cache[msg_id]
