@@ -353,6 +353,8 @@ class JunoMagics(Magics):
             if cell is not None:
                 input_args.insert(0, "execute")
                 _block = True
+            if input_args[0] == "select":
+                _block = True
             args, extra = self._parser.parse_known_args(input_args)
             if _block:
                 self._queue = Queue.Queue()
