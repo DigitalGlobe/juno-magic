@@ -87,8 +87,14 @@ def build_display_data(obj):
 def handle_iopub_msg(msg):
     parent_id = msg["parent_header"]["msg_id"]
     if msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":
-        status_msg_cache[parent_id].callback(True)
-        idle_d.callback(True)
+        log.msg('got an idle status: prid = {}'.format(parent_id))
+        try:
+            status_msg_cache[parent_id].callback(True)
+            log.msg("successfully called back status deferred")
+            idle_d.callback(True)
+            log.msg("successfully called back idle deferred")
+        except AlreadyCalledError:
+            log.msg("something was already called back in handle_io_pub_msg!")
         reactor.callLater(1.0, clean_cache, status_msg_cache, key=parent_id)
 
 def handle_comm_open(msg):
@@ -232,11 +238,15 @@ def build_bridge_class(magics_instance):
 
 def on_interrupt(*args):
     for key in status_msg_cache.keys():
+        log.msg("in on_interrupt: cleaning up status_msg_cache")
         status_msg_cache[key].callback(None)
         clean_cache(status_msg_cache, key=key)
     try:
+        log.msg("in on_interrupt trying to callback idle_d")
         idle_d.callback(None)
+        log.msg("successfully called back idle_d")
     except AlreadyCalledError:
+        log.msg("in on_interrupt: idle_d already called back!")
         pass
 
 @inlineCallbacks
@@ -357,6 +367,7 @@ class JunoMagics(Magics):
                 _block = True
             args, extra = self._parser.parse_known_args(input_args)
             if _block:
+                idle_d = Deferred()
                 self._queue = Queue.Queue()
                 self._last_msg_id = None
                 self._wait_fn = wait_for_idle
