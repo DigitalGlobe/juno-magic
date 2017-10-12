@@ -60,9 +60,11 @@ class WampEventDispatcher(JunoComm):
 class KernelEventDispatcher(JunoComm):
     def __init__(self, domain="remote", **kwargs):
         super(KernelEventDispatcher, self).__init__(domain, **kwargs)
+        self._module = "juno_magic.extensions.wamp"
 
     def on_long_running_execute(self, timeout, msg_id):
         msg = self._format_headers()
+        msg["module"] = "juno_magic.extensions.wamp"
         msg["eventLevel"] = "info"
         msg["eventContext"] = {"eventCode": "long_running_execute",
                                "eventDetails": {"timeOut": timeout,
@@ -72,6 +74,7 @@ class KernelEventDispatcher(JunoComm):
 
     def on_interrupt_fail(self, timeout, msg_id):
         msg = self._format_headers()
+        msg["module"] = "juno_magic.extensions.wamp"
         msg["eventLevel"] = "critical"
         msg["eventContext"] = {"eventCode": "kernel_interrupt_fail",
                                "eventDetails": {"timeOut": timeout,
