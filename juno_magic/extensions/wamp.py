@@ -383,7 +383,10 @@ class JunoMagics(Magics):
         self._kernel_event_dispatcher.on_interrupt_fail(self._interrupt_timeout, "whatever")
         for key in [k for k in status_msg_cache.keys() if k != "idle"]:
             log.msg("Calling status messages")
-            status_msg_cache[key].callback(True)
+            try:
+                status_msg_cache[key].callback(True)
+            except AlreadyCalledError:
+                status_msg_cache.__delitem__(key)
         #log.msg("calling idle message")
         #status_msg_cache["idle"].callback(True)
 
