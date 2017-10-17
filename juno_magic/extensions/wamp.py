@@ -83,12 +83,9 @@ def build_display_data(obj):
     return output
 
 def handle_iopub_msg(msg):
-    try:
-        parent_id = msg["parent_header"]["msg_id"]
-    except KeyError: # This means we have a kernel coming online
-        status_msg_cache["idle"].callback(True)
-    else:
-        if msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":
+    if msg["msg_type"] == "status":
+        if msg["content"]["execution_state"] == "idle":
+            parent_id = msg["parent_header"]["msg_id"]
             log.msg('got an idle status: prid = {}'.format(parent_id))
             try:
                 status_msg_cache[parent_id].callback(True)
@@ -96,6 +93,10 @@ def handle_iopub_msg(msg):
             except AlreadyCalledError:
                 log.msg("status msg_id already called back")
             reactor.callLater(1.0, clean_cache, status_msg_cache, key=parent_id)
+        elif msg["content"]["execution_state"] == "starting":
+            log.msg("ABOUT TO INTERRUPT")
+            status_msg_cache["idle"].callback(True)
+            reactor.callLater(0.1, clean_cache, status_msg_cache, key="idle")
 
 def handle_comm_open(msg):
     comm_manager = get_ipython().kernel.comm_manager
@@ -383,8 +384,8 @@ class JunoMagics(Magics):
         for key in [k for k in status_msg_cache.keys() if k != "idle"]:
             log.msg("Calling status messages")
             status_msg_cache[key].callback(True)
-        log.msg("calling idle message")
-        status_msg_cache["idle"].callback(True)
+        #log.msg("calling idle message")
+        #status_msg_cache["idle"].callback(True)
 
     def _handle_execute_status(self):
         if self._last_msg_id is not None:
