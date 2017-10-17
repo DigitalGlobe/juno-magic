@@ -57,9 +57,7 @@ MAX_MESSAGE_PAYLOAD_SIZE = 0
 MAX_FRAME_PAYLOAD_SIZE = 0
 
 global status_msg_cache
-global idle_d
 status_msg_cache = defaultdict(Deferred)
-idle_d = Deferred()
 
 def clean_cache(cache, key=None):
     if key is None:
@@ -85,17 +83,17 @@ def build_display_data(obj):
     return output
 
 def handle_iopub_msg(msg):
-    parent_id = msg["parent_header"]["msg_id"]
-    if msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":
-        log.msg('got an idle status: prid = {}'.format(parent_id))
-        try:
-            status_msg_cache[parent_id].callback(True)
-            log.msg("successfully called back status deferred")
-            idle_d.callback(True)
-            log.msg("successfully called back idle deferred")
-        except AlreadyCalledError:
-            log.msg("something was already called back in handle_io_pub_msg!")
-        reactor.callLater(1.0, clean_cache, status_msg_cache, key=parent_id)
+    if msg["msg_type"] == "status":
+        if msg["content"]["execution_state"] == "idle":
+            parent_id = msg["parent_header"]["msg_id"]
+            try:
+                status_msg_cache[parent_id].callback(True)
+            except AlreadyCalledError:
+                pass
+            reactor.callLater(1.0, clean_cache, status_msg_cache, key=parent_id)
+    if "idle" in status_msg_cache:
+        if not status_msg_cache["idle"].called:
+            status_msg_cache["idle"].callback(True)
 
 def handle_comm_open(msg):
     comm_manager = get_ipython().kernel.comm_manager
@@ -235,26 +233,13 @@ def build_bridge_class(magics_instance):
 
     return WampConnectionComponent
 
-
-def on_interrupt(*args):
-    for key in status_msg_cache.keys():
-        log.msg("in on_interrupt: cleaning up status_msg_cache")
-        status_msg_cache[key].callback(None)
-        clean_cache(status_msg_cache, key=key)
-    try:
-        log.msg("in on_interrupt trying to callback idle_d")
-        idle_d.callback(None)
-        log.msg("successfully called back idle_d")
-    except AlreadyCalledError:
-        log.msg("in on_interrupt: idle_d already called back!")
-        pass
+@inlineCallbacks
+def wait_for_status(msg_id):
+    yield status_msg_cache[msg_id]
 
 @inlineCallbacks
-def wait_for_idle(msg_id=None):
-    if not msg_id:
-        yield idle_d
-    else:
-        yield status_msg_cache[msg_id]
+def wait_for_idle():
+    yield status_msg_cache["idle"]
 
 @magics_class
 class JunoMagics(Magics):
@@ -363,21 +348,23 @@ class JunoMagics(Magics):
             if cell is not None:
                 input_args.insert(0, "execute")
                 _block = True
+                try:
+                    status_msg_cache.__delitem__("idle")
+                except KeyError:
+                    pass
             if input_args[0] == "select":
                 _block = True
             args, extra = self._parser.parse_known_args(input_args)
             if _block:
-                idle_d = Deferred()
                 self._queue = Queue.Queue()
                 self._last_msg_id = None
-                self._wait_fn = wait_for_idle
                 try:
                     result = blockingCallFromThread(reactor, args.fn, queue=self._queue, timeout=self._execute_timeout,
                                                     timeout_handler=self._handle_execute_status,
                                                     cell=cell, **vars(args))
                     return result
                 except KeyboardInterrupt as ke:
-                    result = blockingCallFromThread(reactor, self._wait_fn, timeout=self._interrupt_timeout,
+                    result = blockingCallFromThread(reactor, wait_for_idle, timeout=self._interrupt_timeout,
                                                     timeout_handler=self._handle_interrupt_status)
             else:
                 result = args.fn(cell=cell, **vars(args))
@@ -388,9 +375,13 @@ class JunoMagics(Magics):
         except SystemExit:
             pass
 
-    def _handle_interrupt_status(self, msg_id="whatever"):
-        self._kernel_event_dispatcher.on_interrupt_fail(self._interrupt_timeout, msg_id)
-        on_interrupt()
+    def _handle_interrupt_status(self):
+        self._kernel_event_dispatcher.on_interrupt_fail(self._interrupt_timeout, "NA")
+        for key in [k for k in status_msg_cache.keys() if k != "idle"]:
+            try:
+                status_msg_cache[key].callback(True)
+            except AlreadyCalledError:
+                status_msg_cache.__delitem__(key)
 
     def _handle_execute_status(self):
         if self._last_msg_id is not None:
@@ -572,7 +563,7 @@ class JunoMagics(Magics):
         else:
             output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
         self._last_msg_id = output
-        yield self._wait_fn(msg_id=output)
+        yield status_msg_cache[output]
 
 
     @inlineCallbacks
