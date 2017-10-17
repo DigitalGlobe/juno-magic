@@ -93,10 +93,13 @@ def handle_iopub_msg(msg):
             except AlreadyCalledError:
                 log.msg("status msg_id already called back")
             reactor.callLater(1.0, clean_cache, status_msg_cache, key=parent_id)
-        elif msg["content"]["execution_state"] == "starting":
-            log.msg("ABOUT TO INTERRUPT")
+    if "idle" in status_msg_cache:
+        if not status_msg_cache["idle"].called:
             status_msg_cache["idle"].callback(True)
-            reactor.callLater(0.1, clean_cache, status_msg_cache, key="idle")
+#         elif msg["content"]["execution_state"] == "starting":
+#            log.msg("ABOUT TO INTERRUPT")
+#            status_msg_cache["idle"].callback(True)
+#            reactor.callLater(0.1, clean_cache, status_msg_cache, key="idle")
 
 def handle_comm_open(msg):
     comm_manager = get_ipython().kernel.comm_manager
@@ -354,6 +357,10 @@ class JunoMagics(Magics):
             if cell is not None:
                 input_args.insert(0, "execute")
                 _block = True
+                try:
+                    status_msg_cache.__delitem__("idle")
+                except KeyError:
+                    pass
             if input_args[0] == "select":
                 _block = True
             args, extra = self._parser.parse_known_args(input_args)
