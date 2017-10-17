@@ -158,6 +158,7 @@ def build_bridge_class(magics_instance):
             #     pass
 
         def on_iopub(self, msg):
+            log.msg(msg)
             if msg["msg_type"] == "error":
                 publish_display_data({"text/plain": "{} - {}\n{}".format(msg["content"]["ename"],
                                                                          msg["content"]["evalue"],
