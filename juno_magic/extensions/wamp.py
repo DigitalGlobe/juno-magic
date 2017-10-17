@@ -378,6 +378,7 @@ class JunoMagics(Magics):
                                                     cell=cell, **vars(args))
                     return result
                 except KeyboardInterrupt as ke:
+                    log.msg("caught KEYBOARDINTERRUPT")
                     result = blockingCallFromThread(reactor, self._wait_fn, timeout=self._interrupt_timeout,
                                                     timeout_handler=self._handle_interrupt_status)
             else:
