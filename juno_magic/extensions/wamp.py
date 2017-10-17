@@ -277,7 +277,7 @@ class JunoMagics(Magics):
         self._wamp_event_dispatcher = WampEventDispatcher(self)
         self._kernel_event_dispatcher = KernelEventDispatcher()
         self._interrupt_timeout = 5 # Wait time before notifying interrupt failure
-        self._execute_timeout = 120 # Wait time before notifying long running execution
+        self._execute_timeout = 10 # Wait time before notifying long running execution
         self._queue = Queue.Queue()
         self._last_msg_id = None
 
