@@ -301,9 +301,10 @@ def main():
                 log.msg("ConnectionRefusedError: Trying to reconnect... ")
                 yield sleep(1.0)
 
-
+    @inlineCallbacks
     def shutdown(result):
-        IOLoop.current().stop()
+        yield IOLoop.current().stop()
+        exec("circusctl quit")
 
     d = reconnector(args.auto_shutdown)
     d.addCallback(shutdown)
