@@ -217,7 +217,8 @@ def build_bridge_class(magics_instance):
                 yield self.set_prefix(magics_instance._kernel_prefix)
                 print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
             if not magics_instance._heartbeat.running:
-                magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
+#                magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
+                pass
             returnValue(None)
 
         @inlineCallbacks
@@ -543,7 +544,8 @@ class JunoMagics(Magics):
         if kernel != self._kernel_prefix:
             yield _select(kernel)
             if not self._heartbeat.running:
-                self._heartbeat.start(self._hb_interval)
+#                self._heartbeat.start(self._hb_interval)
+                pass
         else:
             print("Kernel already selected")
 
