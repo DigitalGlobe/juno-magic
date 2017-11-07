@@ -246,7 +246,7 @@ def main():
     parser.add_argument("--token", type=unicode, help="OAuth token to connect to router")
     parser.add_argument("--auto-shutdown", action="store_true",
                         default=False, help="When set, disconnect and cleanup Wamp session when heartbeat times out and then stop the IOLoop")
-    parser.add_argument("--hb-interval", type=int, default=30, help="The heartbeat interval used when auto-shutdown is set")
+    parser.add_argument("--hb-interval", type=int, default=120, help="The heartbeat interval used when auto-shutdown is set")
     parser.add_argument("file", help="Connection file")
     args = parser.parse_args()
 
