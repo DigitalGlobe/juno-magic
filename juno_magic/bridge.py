@@ -244,8 +244,7 @@ def main():
     parser.add_argument("--wamp-realm", default=u"jupyter", help='Router realm')
     parser.add_argument("--wamp-url", default=u"ws://127.0.0.1:8123", help="WAMP Websocket URL")
     parser.add_argument("--token", type=unicode, help="OAuth token to connect to router")
-    parser.add_argument("--auto-shutdown", action="store_true",
-                        default=False, help="When set, disconnect and cleanup Wamp session when heartbeat times out and then stop the IOLoop")
+    parser.add_argument("--shutdown-interval", default=0, help="When set, disconnect and cleanup Wamp session when heartbeat times out and then stop the IOLoop")
     parser.add_argument("--hb-interval", type=int, default=120, help="The heartbeat interval used when auto-shutdown is set")
     parser.add_argument("file", help="Connection file")
     args = parser.parse_args()
@@ -278,14 +277,18 @@ def main():
                 proto._session._has_been_pinged = False
 
     @inlineCallbacks
-    def reconnector(shutdown_on_timeout):
+    def reconnector(shutdown_interval):
+        shutdown_on_timeout = False
+        if shutdown_interval > 0:
+            shutdown_on_timeout = True
         while True:
             try:
                 hb = None
                 log.msg("Attempting to connect...")
                 wampconnection = yield _bridge_runner.run(build_bridge_class(client), start_reactor=False)
-                hb = LoopingCall(heartbeat, (wampconnection))
-                hb.start(args.hb_interval, now=False)
+                if shutdown_on_timeout:
+                    hb = LoopingCall(heartbeat, (wampconnection))
+                    hb.start(shutdown_interval, now=False)
                 log.msg(wampconnection)
                 yield sleep(10.0) # Give the connection time to set _session
                 while wampconnection.isOpen():
@@ -306,6 +309,7 @@ def main():
         yield IOLoop.current().stop()
         exec("circusctl quit")
 
+    assert args.shutdown_interval >= 0
     d = reconnector(args.auto_shutdown)
     d.addCallback(shutdown)
     # start the tornado io loop
