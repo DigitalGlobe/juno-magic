@@ -339,6 +339,8 @@ class JunoMagics(Magics):
         execute_parser = subparsers.add_parser("execute", help="Evaluate code on remote kernel")
         execute_parser.add_argument("prefix", help="Prefix for accessing the remote kernel", nargs="?")
         execute_parser.set_defaults(fn=self.execute)
+        status_parser = subparsers.add_parser("status", help="If connected to a remote kernel, returns that kernel address. Otherwise, returns None")
+        status_parser.set_defaults(fn=self.status)
         return parser
 
     @line_cell_magic
@@ -390,6 +392,9 @@ class JunoMagics(Magics):
 
     def token(self, token, **kwargs):
         self._token = token
+
+    def status(self, **kwargs):
+        return self._kernel_prefix
 
     def log_status(self):
         log.msg("    self._wamp: {}".format(self._wamp))
