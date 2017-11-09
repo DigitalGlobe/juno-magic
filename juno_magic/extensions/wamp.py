@@ -392,7 +392,7 @@ class JunoMagics(Magics):
     def token(self, token, **kwargs):
         self._token = token
 
-    def status(self):
+    def status(self, **kwargs):
         return self._kernel_prefix
 
     def log_status(self):
