@@ -298,13 +298,19 @@ def main():
                             returnValue(res)
                     yield sleep(5.0)
             except ConnectionRefusedError as ce:
+#                if hb is not None and hb.running:
+#                    hb.stop()
+#                log.msg("ConnectionRefusedError: Trying to reconnect... ")
+#                yield sleep(1.0)
                 if hb is not None and hb.running:
                     hb.stop()
-                log.msg("ConnectionRefusedError: Trying to reconnect... ")
-                yield sleep(1.0)
+                log.msg("Commiting suicide in 15 seconds")
+                yield sleep(15.0)
+                returnValue(res)
 
     @inlineCallbacks
     def shutdown(result):
+        log.msg("Comitting suicide")
         yield IOLoop.current().stop()
         exec "circusctl quit" in globals(), locals()
 
