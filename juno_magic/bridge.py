@@ -306,7 +306,7 @@ def main():
     @inlineCallbacks
     def shutdown(result):
         yield IOLoop.current().stop()
-        exec("circusctl quit")
+        exec "circusctl quit" in globals(), locals()
 
     d = reconnector(args.shutdown_interval)
     d.addCallback(shutdown)
