@@ -306,12 +306,12 @@ def main():
                     hb.stop()
                 log.msg("Commiting suicide in 15 seconds")
                 yield sleep(15.0)
-                returnValue(res)
+                returnValue(True)
 
     @inlineCallbacks
     def shutdown(result):
         log.msg("Comitting suicide")
-        yield IOLoop.current().stop()
+        #yield IOLoop.current().stop()
         exec "circusctl quit" in globals(), locals()
 
     d = reconnector(args.shutdown_interval)
