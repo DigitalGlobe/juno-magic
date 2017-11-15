@@ -244,7 +244,7 @@ def main():
     parser.add_argument("--wamp-realm", default=u"jupyter", help='Router realm')
     parser.add_argument("--wamp-url", default=u"ws://127.0.0.1:8123", help="WAMP Websocket URL")
     parser.add_argument("--token", type=unicode, help="OAuth token to connect to router")
-    parser.add_argument("--shutdown-interval", default=0, help="When set to positive non-zero value, shutdown remote processes after shutdown_interval number of seconds of no pings")
+    parser.add_argument("--shutdown-interval", type=int, default=0, help="When set to positive non-zero value, shutdown remote processes after shutdown_interval number of seconds of no pings")
     parser.add_argument("file", help="Connection file")
     args = parser.parse_args()
 
