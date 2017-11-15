@@ -244,8 +244,7 @@ def main():
     parser.add_argument("--wamp-realm", default=u"jupyter", help='Router realm')
     parser.add_argument("--wamp-url", default=u"ws://127.0.0.1:8123", help="WAMP Websocket URL")
     parser.add_argument("--token", type=unicode, help="OAuth token to connect to router")
-    parser.add_argument("--shutdown-interval", default=0, help="When set, disconnect and cleanup Wamp session when heartbeat times out and then stop the IOLoop")
-    parser.add_argument("--hb-interval", type=int, default=120, help="The heartbeat interval used when auto-shutdown is set")
+    parser.add_argument("--shutdown-interval", default=0, help="When set to positive non-zero value, shutdown remote processes after shutdown_interval number of seconds of no pings")
     parser.add_argument("file", help="Connection file")
     args = parser.parse_args()
 
@@ -309,8 +308,7 @@ def main():
         yield IOLoop.current().stop()
         exec("circusctl quit")
 
-    assert args.shutdown_interval >= 0
-    d = reconnector(args.auto_shutdown)
+    d = reconnector(args.shutdown_interval)
     d.addCallback(shutdown)
     # start the tornado io loop
     IOLoop.current().start()
