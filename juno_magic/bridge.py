@@ -18,7 +18,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue, CancelledError,
 from twisted.internet.task import LoopingCall
 from twisted.internet.error import ConnectionRefusedError
 from autobahn.twisted.util import sleep
-from autobahn.twisted.wamp import ApplicationSession, Service
+from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner, Service
 from autobahn import wamp
 from autobahn.wamp.exception import ApplicationError
 
@@ -36,9 +36,15 @@ except ImportError:
 if sys.version.startswith("3"):
     unicode = str
 
-from .runner import JunoRunner
 
 _zmq_factory = ZmqFactory()
+
+def cleanup(proto):
+    if hasattr(proto, '_session') and proto._session is not None:
+        if proto._session.is_attached():
+            return proto._session.leave()
+        elif proto._session.is_connected():
+            return proto._session.disconnect()
 
 class ZmqProxyConnection(ZmqSubConnection):
     def __init__(self, endpoint, wamp_session, prefix):
@@ -60,6 +66,8 @@ def build_bridge_class(client):
         prefix_list = set()
         machine_connection = None
         _lock = DeferredLock()
+        _has_been_pinged = False
+        _has_timedout = False
 
         @wamp.register(u"io.timbr.kernel.{}.execute".format(_key))
         @inlineCallbacks
@@ -147,6 +155,7 @@ def build_bridge_class(client):
 
         @wamp.register(u"io.timbr.kernel.{}.ping".format(_key))
         def ping(self):
+            self._has_been_pinged = True
             return client.is_alive()
 
         @inlineCallbacks
@@ -203,8 +212,8 @@ def build_bridge_class(client):
                 self.machine_connection.shutdown()
             except AttributeError:
                 pass
-            finally:
-                self.proxy_machine_channel()
+            #finally:
+                #self.proxy_machine_channel()
 
             log.msg("[onJoin] ...done.")
             log.msg(client.hb_channel._running)
@@ -228,7 +237,6 @@ def build_bridge_class(client):
 
 def main():
     global _bridge_runner
-    log.startLogging(sys.stdout)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="Enable debug output.")
@@ -236,8 +244,17 @@ def main():
     parser.add_argument("--wamp-realm", default=u"jupyter", help='Router realm')
     parser.add_argument("--wamp-url", default=u"ws://127.0.0.1:8123", help="WAMP Websocket URL")
     parser.add_argument("--token", type=unicode, help="OAuth token to connect to router")
+    parser.add_argument("--auto-shutdown", action="store_true",
+                        default=False, help="When set, disconnect and cleanup Wamp session when heartbeat times out and then stop the IOLoop")
+    parser.add_argument("--hb-interval", type=int, default=30, help="The heartbeat interval used when auto-shutdown is set")
     parser.add_argument("file", help="Connection file")
     args = parser.parse_args()
+
+    if args.debug:
+        try:
+            log.startLogging(open('/home/gremlin/wamp.log', 'w'), setStdout=False)
+        except IOError:
+            pass
 
     with open(args.file) as f:
         config = json.load(f)
@@ -246,28 +263,50 @@ def main():
     client.load_connection_file()
     client.start_channels()
 
-    _bridge_runner = JunoRunner(url=unicode(args.wamp_url), realm=unicode(args.wamp_realm),
+    _bridge_runner = ApplicationRunner(url=unicode(args.wamp_url), realm=unicode(args.wamp_realm),
                                 headers={"Authorization": "Bearer {}".format(args.token),
                                          "X-Kernel-ID": client.session.key})
 
     log.msg("Connecting to router: %s" % args.wamp_url)
     log.msg("  Project Realm: %s" % (args.wamp_realm))
 
+    def heartbeat(proto):
+        if hasattr(proto, '_session') and proto._session is not None:
+            if not proto._session._has_been_pinged:
+                proto._session._has_timedout = True
+            else:
+                proto._session._has_been_pinged = False
+
     @inlineCallbacks
-    def reconnector():
+    def reconnector(shutdown_on_timeout):
         while True:
             try:
+                hb = None
                 log.msg("Attempting to connect...")
                 wampconnection = yield _bridge_runner.run(build_bridge_class(client), start_reactor=False)
+                hb = LoopingCall(heartbeat, (wampconnection))
+                hb.start(args.hb_interval, now=False)
                 log.msg(wampconnection)
                 yield sleep(10.0) # Give the connection time to set _session
                 while wampconnection.isOpen():
+                    if shutdown_on_timeout:
+                        if wampconnection._session._has_timedout:
+                            hb.stop()
+                            res = yield cleanup(wampconnection)
+                            returnValue(res)
                     yield sleep(5.0)
             except ConnectionRefusedError as ce:
+                if hb is not None and hb.running:
+                    hb.stop()
                 log.msg("ConnectionRefusedError: Trying to reconnect... ")
                 yield sleep(1.0)
 
-    reconnector()
+
+    def shutdown(result):
+        IOLoop.current().stop()
+
+    d = reconnector(args.auto_shutdown)
+    d.addCallback(shutdown)
     # start the tornado io loop
     IOLoop.current().start()
 

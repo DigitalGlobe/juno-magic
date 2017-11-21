@@ -1,27 +1,31 @@
 function load_ipython_extension() {
+
   var extensionLoaded = false;
+
+  function loadScript( host, name ) {
+    var script = document.createElement( 'script' );
+    script.src = name
+      ? host + `/juno/${name}.js`
+      : host;
+    document.head.appendChild( script );
+    return script;
+  }
 
   function loadJuno( host ) {
     if ( extensionLoaded ) { return; }
-    var script = document.createElement( 'script' );
-    script.src = host + '/juno/nbextension.js';
-    document.getElementsByTagName( 'head' )[0].appendChild( script );
-  }
 
-  function handleKernel( kernel ) {
-    kernel.execute( "import os\nprint os.environ['JUNO_HOST']", {
-      iopub: {
-        output: function( response ) {
-          var host = 'http://localhost:3000';
-          //var host = 'drama.timbr.io';
-          //var host = 'app0.timbr.io';
-          if ( response.msg_type === 'stream' ) {
-            host = response.content.text;
-          }
-          loadJuno( host );
-        }
+    var reqReact = window.requirejs.config({
+      paths: {
+        'react': host + '/juno/react',
+        'react-dom': host + '/juno/react-dom'
       }
-    }, { silent: false } ); 
+    });
+
+    reqReact([ 'react', 'react-dom' ], () => {
+      reqReact([ host + '/juno/vendor.js'], () => {
+        reqReact([ host + '/juno/nbextension.js'], () => {});
+      });
+    });
   }
 
   requirejs( [
@@ -30,10 +34,10 @@ function load_ipython_extension() {
   ], function( Jupyter, Events ) {
     // On new kernel session create new comm managers
     if ( Jupyter.notebook && Jupyter.notebook.kernel ) {
-      handleKernel( Jupyter.notebook.kernel );
+      loadJuno( '//' + window.location.host )
     }
     Events.on( 'kernel_created.Kernel kernel_created.Session', ( event, data ) => {
-      handleKernel( data.kernel );
+      loadJuno( '//' + window.location.host );
     });
   });
 }

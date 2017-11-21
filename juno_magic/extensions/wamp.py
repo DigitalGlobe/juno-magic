@@ -1,3 +1,12 @@
+from twisted.internet import reactor, threads
+from threading import Thread
+_REACTOR_THREAD  = Thread(target=reactor.run, args=(False,))
+_REACTOR_THREAD.start()
+from twisted.python import log
+from twisted.internet.task import LoopingCall
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, AlreadyCalledError
+from twisted.internet.error import ConnectError, ConnectionLost
+
 from IPython.core.magic import (Magics, magics_class, line_magic,
                                 cell_magic, line_cell_magic)
 from IPython import get_ipython
@@ -11,43 +20,54 @@ import os
 import sys
 import shlex
 import json
-from time import sleep
+from collections import defaultdict
+from functools import partial
 
-if sys.version.startswith("3"):
+if sys.version_info >= (3, 0):
     unicode = str
+    import queue as Queue
+else:
+    import Queue
 
-from twisted.internet.error import ReactorAlreadyInstalledError
-from zmq.eventloop import ioloop
-ioloop.install()
-from tornado.ioloop import IOLoop
-import tornado.platform.twisted
-try:
-    tornado.platform.twisted.install()
-except ReactorAlreadyInstalledError:
-    pass
-
-from twisted.python import log
-from twisted.internet import reactor, threads
-from twisted.internet.task import LoopingCall
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
-from autobahn.twisted.wamp import ApplicationSession
+from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
+from autobahn.twisted.websocket import WampWebSocketClientProtocol
 from autobahn import wamp
 from autobahn.wamp.exception import ApplicationError, TransportLost
 from autobahn.websocket.util import parse_url
 from autobahn.twisted.util import sleep as absleep
 
-from juno_magic.runner import JunoRunner
-
 from collections import deque
 
-from sh import wampify
+try:
+    from sh import wampify
+    _ENABLE_START_BRIDGE = True
+except ImportError:
+    _ENABLE_START_BRIDGE = False
 
 import requests
 import re
 
+from juno_magic.util.threads import blockingCallFromThread
+from juno_magic.util.wamp import get_session_info, cleanup_session
+from juno_magic.extensions.comms import WampEventDispatcher, KernelEventDispatcher
 
 JUNO_KERNEL_URI = os.environ.get("JUNO_KERNEL_URI", "https://juno.timbr.io/juno/api/kernels/list")
 
+MAX_MESSAGE_PAYLOAD_SIZE = 0
+MAX_FRAME_PAYLOAD_SIZE = 0
+
+global status_msg_cache
+status_msg_cache = defaultdict(Deferred)
+
+def clean_cache(cache, key=None):
+    if key is None:
+        for k in cache.keys():
+            cache.__delitem__(k)
+    else:
+        try:
+            cache.__delitem__(key)
+        except KeyError:
+            pass
 
 def publish_to_display(obj):
     output, _ = DisplayFormatter().format(obj)
@@ -61,6 +81,19 @@ def build_display_data(obj):
     if "_repr_javascript_" in methods:
         output["application/javascript"] = obj._repr_javascript_()
     return output
+
+def handle_iopub_msg(msg):
+    if msg["msg_type"] == "status":
+        if msg["content"]["execution_state"] == "idle":
+            parent_id = msg["parent_header"]["msg_id"]
+            try:
+                status_msg_cache[parent_id].callback(True)
+            except AlreadyCalledError:
+                pass
+            reactor.callLater(1.0, clean_cache, status_msg_cache, key=parent_id)
+    if "idle" in status_msg_cache:
+        if not status_msg_cache["idle"].called:
+            status_msg_cache["idle"].callback(True)
 
 def handle_comm_open(msg):
     comm_manager = get_ipython().kernel.comm_manager
@@ -86,9 +119,11 @@ def on_comm_open(comm, msg):
 def handle_comm_msg(msg):
     content = msg['content']
     comm_id = content['comm_id']
-    get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg(msg['msg_type'],
-        data=content['data'], metadata={"echo": True}, buffers=None
-    )
+    try:
+        get_ipython().kernel.comm_manager.comms[comm_id]._publish_msg(msg['msg_type'],
+            data=content['data'], metadata={"echo": True}, buffers=None)
+    except KeyError: # We may receive a message before comm_open registration due to a race, but the key does get registered. Handling here for now.
+        pass
 
 def build_bridge_class(magics_instance):
     class WampConnectionComponent(ApplicationSession):
@@ -136,15 +171,13 @@ def build_bridge_class(magics_instance):
                 handle_comm_open( msg)
             elif msg["msg_type"] in ["comm_msg", "comm_close"]:
                 handle_comm_msg(msg)
-            elif msg["msg_type"] in ["execute_input", "execution_state", "status"]:
-                pass
+            elif msg["msg_type"] in ["execute_input", "execution_state", "status", "clear_output"]:
+                handle_iopub_msg(msg)
             else:
                 pprint(msg)
 
 
         def on_machine(self, msg):
-            # print("[on_machine] {}".format(msg))
-            # print("[on_machine] {}".format(self._machine_callbacks))
             bad_callbacks = []
             for cb in self._machine_callbacks:
                 try:
@@ -176,32 +209,37 @@ def build_bridge_class(magics_instance):
             yield self.register(self)
             log.msg("[onJoin] ...done.")
             log.msg("[onJoin] Checking in with Magics class")
-            magics_instance.set_connection(self)
+            yield magics_instance.set_connection(self)
             log.msg("[onJoin] ...done.")
             print("Successfully connected to {}".format(magics_instance._router_url))
             if magics_instance._kernel_prefix:
                 print("Attempting to reconnect to {}".format(magics_instance._kernel_prefix))
                 yield self.set_prefix(magics_instance._kernel_prefix)
                 print("Reconnected to kernel prefix {}".format(magics_instance._kernel_prefix))
-                if not magics_instance._heartbeat.running:
-                    magics_instance._heartbeat.start(self._hb_interval, now=False)
+            if not magics_instance._heartbeat.running:
+                magics_instance._heartbeat.start(magics_instance._hb_interval, now=False)
             returnValue(None)
 
         @inlineCallbacks
         def onLeave(self, details):
             log.msg("[WampConnectionComponent] onLeave()")
             log.msg("details: {}".format(str(details)))
-            super(self.__class__, self).onLeave(details)
-            magics_instance.set_connection(None)
-            log.msg("set magics connection to None")
-            returnValue(None)
+            magics_instance._wamp_event_dispatcher(details)
+            res =  yield super(WampConnectionComponent, self).onLeave(details)
+            returnValue(res)
 
         def onDisconnect(self):
-            # onDisconnect we should just set the connection to None so that we know to reconnect
-            # next time connect is called
-            #magics_instance.set_connection(None)
             pass
+
     return WampConnectionComponent
+
+@inlineCallbacks
+def wait_for_status(msg_id):
+    yield status_msg_cache[msg_id]
+
+@inlineCallbacks
+def wait_for_idle():
+    yield status_msg_cache["idle"]
 
 @magics_class
 class JunoMagics(Magics):
@@ -217,31 +255,57 @@ class JunoMagics(Magics):
         self._token = os.environ.get("JUNO_AUTH_TOKEN")
         self._sp = None
         self._connected = None
-        self._hb_interval = 10
+        self._hb_interval = 5
         self._heartbeat = LoopingCall(self._ping)
+        self._debug = True
+        self._wamp_event_dispatcher = WampEventDispatcher(self)
+        self._kernel_event_dispatcher = KernelEventDispatcher()
+        self._interrupt_timeout = 5 # Wait time before notifying interrupt failure
+        self._execute_timeout = 120 # Wait time before notifying long running execution
+        self._queue = Queue.Queue()
+        self._last_msg_id = None
 
-        # set local kernel key
-        with open(self._connection_file) as f:
-            config = json.load(f)
-            self._kernel_key = config["key"]
+        if self._debug:
+            try:
+                log.startLogging(open('/home/gremlin/wamp.log', 'w'), setStdout=False)
+            except IOError:
+                pass
+
+        try:        # set local kernel key
+            with open(self._connection_file) as f:
+                config = json.load(f)
+                self._kernel_key = config["key"]
+        except TypeError:
+            self._kernel_key = None
 
         self._parser = self.generate_parser()
 
-    def set_connection(self, wamp_connection):
-        # Make sure things get cleaned up no matter why the reset happens
-        try:
-            self._wamp.leave()
-            self._wamp_runner.cancel()
-            del self._wamp
-        except (CancelledError, AttributeError):
-            pass
+    if _ENABLE_START_BRIDGE:
+        def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
+            self.stop_bridge()
+            if token is None:
+                token = self._token
+            self._sp = wampify(self._connection_file, "--wamp-url", wamp_url, "--token", token, _bg=True)
+            sleep(1)
+            if self._sp.process.is_alive():
+                print("Bridge Running")
+            else:
+                print(self._sp.stderr)
 
-        self._wamp = wamp_connection
-        if wamp_connection is not None:
-            self._connected.callback(wamp_connection)
-        else:
-            if self._heartbeat.running:
-                self._heartbeat.stop()
+        def stop_bridge(self, **kwargs):
+            try:
+                self._sp.process.terminate()
+                print("WAMP bridge exposure process terminated successfully")
+            except AttributeError as ae:
+                pass
+            self._sp = None
+
+    else:
+        def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
+            raise NotImplementedError("starting/stopping bridge via magic not supported in your environment")
+
+        def stop_bridge(self, **kwargs):
+            raise NotImplementedError("starting/stopping bridge via magic not supported in your environment")
 
     def generate_parser(self):
         parser = argparse.ArgumentParser(prog="juno")
@@ -274,66 +338,165 @@ class JunoMagics(Magics):
         execute_parser = subparsers.add_parser("execute", help="Evaluate code on remote kernel")
         execute_parser.add_argument("prefix", help="Prefix for accessing the remote kernel", nargs="?")
         execute_parser.set_defaults(fn=self.execute)
+        status_parser = subparsers.add_parser("status", help="If connected to a remote kernel, returns that kernel address. Otherwise, returns None")
+        status_parser.set_defaults(fn=self.status)
         return parser
 
     @line_cell_magic
     def juno(self, line, cell=None):
+        _block = False
         try:
             input_args = shlex.split(line)
             if cell is not None:
                 input_args.insert(0, "execute")
+                _block = True
+                try:
+                    status_msg_cache.__delitem__("idle")
+                except KeyError:
+                    pass
+            if input_args[0] == "select":
+                _block = True
             args, extra = self._parser.parse_known_args(input_args)
-            output = args.fn(cell=cell, **vars(args))
-            if isinstance(output, Deferred):
-                output.addCallback(lambda x: publish_to_display(x) if x is not None else "[muted]")
+            if _block:
+                self._queue = Queue.Queue()
+                self._last_msg_id = None
+                try:
+                    result = blockingCallFromThread(reactor, args.fn, queue=self._queue, timeout=self._execute_timeout,
+                                                    timeout_handler=self._handle_execute_status,
+                                                    cell=cell, **vars(args))
+                    return result
+                except KeyboardInterrupt as ke:
+                    result = blockingCallFromThread(reactor, wait_for_idle, timeout=self._interrupt_timeout,
+                                                    timeout_handler=self._handle_interrupt_status)
             else:
-                return output
+                result = args.fn(cell=cell, **vars(args))
+                if isinstance(result, Deferred):
+                    result.addCallback(lambda x: publish_to_display(x) if x is not None else "[muted]")
+                else:
+                    return result
         except SystemExit:
             pass
+
+    def _handle_interrupt_status(self):
+        self._kernel_event_dispatcher.on_interrupt_fail(self._interrupt_timeout, "NA")
+        for key in [k for k in status_msg_cache.keys() if k != "idle"]:
+            try:
+                status_msg_cache[key].callback(True)
+            except AlreadyCalledError:
+                status_msg_cache.__delitem__(key)
+
+    def _handle_execute_status(self):
+        if self._last_msg_id is not None:
+            self._kernel_event_dispatcher.on_long_running_execute(self._execute_timeout, self._last_msg_id)
 
     def token(self, token, **kwargs):
         self._token = token
 
+    def status(self, **kwargs):
+        return self._kernel_prefix
+
+    def log_status(self):
+        log.msg("    self._wamp: {}".format(self._wamp))
+        log.msg("    self._wamp_runner: {}".format(self._wamp_runner))
+        log.msg("    self._connected: {}".format(self._connected))
+        if self._connected is not None:
+            log.msg("   self._connected state: {}".format(self._connected.called))
+
+    @property
+    def _has_protocol(self):
+        if isinstance(self._wamp_runner, WampWebSocketClientProtocol):
+            return True
+        return False
+
+    @property
+    def _connection_dead(self):
+        if self._has_protocol:
+            if self._wamp_runner.state == self._wamp_runner.STATE_CLOSED:
+                return True
+        return False
+
+    @property
+    def _connection_active(self):
+        if self._has_protocol:
+            return not self._connection_dead
+        return False
+
+    @property
+    def _ready_to_connect(self):
+        # Below, check if a deferred has been assigned but not yet called; an
+        # uncalled self._connected implies a connection has been initialzed and
+        # is attempting to connect.This needs to be checked before we implement
+        # the actual WAMP connection status logic. This avoids a potential race
+        # that might occur due to simultaneous (or close to simultaneous)
+        # connect calls by ensuring the existence of not more than a single
+        # connection instance at any time.
+        if self._connected is None or isinstance(self._connected, Deferred) and self._connected.called:
+            return not self._connection_active
+        return False
+
+    @property
+    def connected(self):
+        if self._has_protocol:
+            if self._wamp_runner.isOpen():
+                return True
+        return False
+
+    @property
+    def wamp_config(self):
+        s = {"wamp_config": {"router_url": self._router_url}}
+        return s
+
+    @inlineCallbacks
+    def set_connection(self, wamp_connection, do_cleanup=True):
+        log.msg("SET_CONNECTION: {}".format(wamp_connection))
+        res = None
+        if wamp_connection is None: # On a reset, try to cleanup the previous connection and handle any errors
+            if self._heartbeat.running:
+                self._heartbeat.stop()
+            if do_cleanup:
+                res = yield cleanup_session(self._wamp_runner)
+                self._wamp_event_dispatcher()
+            self._wamp = wamp_connection
+            self._wamp_runner = None
+            self._connected = None
+        else:
+            self._wamp = wamp_connection # Make this assignment before making the callback
+            self._connected.callback(wamp_connection)
+        returnValue(res)
+
+    @inlineCallbacks
     def connect(self, wamp_url, reconnect=False, **kwargs):
         # NOTE: we would like connect to return immediately if there is an active connection, disconnect and
         # connect if the connection url has changed, or reconnect if the connection has dropped
-        if (wamp_url != self._router_url) or reconnect:
-            self.set_connection(None)
+        log.msg("CONNECT called: wamp_url={}".format(wamp_url))
+        self.log_status()
+        if (wamp_url != self._router_url) or reconnect or self._connection_dead:
+            yield self.set_connection(None)
 
-        if self._wamp is None:
-            # NOTE: this means we have dropped the connection (ie onDisconnect has been called), so we'll make
-            # a new one.
+        if self._ready_to_connect:
             self._connected = Deferred() # allocate a new deferred
             self._router_url = wamp_url
-            _wamp_application_runner = JunoRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
-            self._wamp_runner = _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
-            log.msg("Connecting to router: {}".format(self._router_url))
-            log.msg("  Project Realm: {}".format(self._realm))
+            _wamp_application_runner = ApplicationRunner(url=unicode(self._router_url), realm=unicode(self._realm), headers={"Authorization": "Bearer {}".format(self._token)})
+            try:
+                self._wamp_runner = yield _wamp_application_runner.run(build_bridge_class(self), start_reactor=False) # -> returns a deferred
+                self._wamp_runner.maxMessagePayloadSize = MAX_MESSAGE_PAYLOAD_SIZE
+                self._wamp_runner.maxFramePayloadSize = MAX_FRAME_PAYLOAD_SIZE
+            except Exception as e:
+                self._wamp_event_dispatcher(e)
+                yield self.set_connection(None)
+            else:
+                log.msg("Connecting to router: {}".format(self._router_url))
+                log.msg("  Project Realm: {}".format(self._realm))
 
-        # Start the connection manager loop
-        return self._connected # either the new or the old deferred, depending on if we have reconnected or not
+        log.msg("after connect called")
+        self.log_status()
 
-    def start_bridge(self, wamp_url, wamp_realm="jupyter", token=None, **kwargs):
-        self.stop_bridge()
-        if token is None:
-            token = self._token
-        self._sp = wampify(self._connection_file, "--wamp-url", wamp_url, "--token", token, _bg=True)
-        sleep(1)
-        if self._sp.process.is_alive():
-            print("Bridge Running")
-        else:
-            print(self._sp.stderr)
-
-    def stop_bridge(self, **kwargs):
-        try:
-            self._sp.process.terminate()
-            print("WAMP bridge exposure process terminated successfully")
-        except AttributeError as ae:
-            pass
-        self._sp = None
+        res = yield self._connected # either the new or the old deferred, depending on if we have reconnected or not
+        returnValue(res)
 
     @inlineCallbacks
     def list(self, raw=False, **kwargs):
+        log.msg("LIST called")
         yield self.connect(self._router_url)
         try:
             output = yield self._wamp.call(u"io.timbr.kernel.list")
@@ -346,14 +509,20 @@ class JunoMagics(Magics):
             output = []
         if raw is not True:
             prefix_map = yield threads.deferToThread(self._get_kernel_names, output, details=kwargs.get('details'))
-            returnValue(prefix_map)
+            if prefix_map is not None:
+                returnValue(prefix_map)
+            else:
+                print("Unable to access JUNO_KERNEL_URI, displaying kernel prefixes instead of kernel names")
+                returnValue(output)
         else:
             returnValue(output)
         returnValue(output)
 
     @inlineCallbacks
     def select(self, kernel, **kwargs):
+        log.msg("SELECT called on {}".format(kernel))
         yield self.connect(self._router_url)
+
         @inlineCallbacks
         def _select(prefix):
             yield self._wamp.reset_prefix()
@@ -366,23 +535,24 @@ class JunoMagics(Magics):
             print("Kernel selected [{}]".format(prefix))
 
         prefix_list = yield self.list(raw=True)
-        is_kernel_key = lambda t: re.match(r'io\.timbr\.kernel\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', t)
-        if not is_kernel_key(kernel):
+        if kernel in prefix_list:
+            pass
+        else:
             prefix_map = yield threads.deferToThread(self._get_kernel_names, prefix_list, details=True)
             if kernel not in prefix_map:
                 print("Kernel not in prefix map")
-                returnValue(None)
+                returnValue(False)
             else:
                 kernel = prefix_map[kernel]
-        if kernel in prefix_list:
-            if kernel != self._kernel_prefix:
-                yield _select(kernel)
-                if not self._heartbeat.running:
-                    self._heartbeat.start(self._hb_interval)
-            else:
-                print("Kernel already selected")
+
+        if kernel != self._kernel_prefix:
+            yield _select(kernel)
+            if not self._heartbeat.running:
+                self._heartbeat.start(self._hb_interval)
         else:
-            print("Kernel not available")
+            print("Kernel already selected")
+
+        returnValue(True)
 
     @inlineCallbacks
     def subscribe(self, callback, **kwargs):
@@ -395,23 +565,35 @@ class JunoMagics(Magics):
         yield self.connect(self._router_url)
         if prefix is not None:
             output = yield self._wamp.call(".".join([prefix, "execute"]), cell)
-        output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
+        else:
+            output = yield self._wamp.call(".".join([self._kernel_prefix, "execute"]), cell)
+        self._last_msg_id = output
+        yield status_msg_cache[output]
+
 
     @inlineCallbacks
     def _ping(self):
-        # returns True or False if we are still connected
-        # if True, it means everything is ok
-        # if False, it means the remote kernel client has died/is not active
+        if not self.connected:
+            yield self.set_connection(None)
+            log.msg("DETECTED: dead wamp connection; dispatching connection report and resetting to None")
+            returnValue(None)
         try:
-            res = yield self._wamp.call(".".join([self._kernel_prefix, u"ping"]))
-            returnValue(res)
+            if self._kernel_prefix is not None:
+                res = yield self._wamp.call(".".join([self._kernel_prefix, u"ping"]))
+                log.msg("_pinging: " + ".".join([self._kernel_prefix, "ping"]))
+                log.msg("_pong response: {}".format(res))
+            returnValue(None)
         except Exception as e:
-            self.set_connection(None)
+            log.msg("_pong error: {}".format(e))
+            returnValue(None)
 
     def _get_kernel_names(self, prefix_list, details=False):
         headers = {"Authorization": "Bearer {}".format(self._token)}
         payload = {"addresses": [prefix.split(".")[-1] for prefix in prefix_list]}
-        r = requests.post(JUNO_KERNEL_URI, headers=headers, data=payload)
+        try:
+            r = requests.post(JUNO_KERNEL_URI, headers=headers, data=payload)
+        except Exception as e:
+            return None
         if details:
             prefix_map = {str(v): ".".join(['io.timbr.kernel', str(k)]) for k, v in r.json().iteritems()}
         else:

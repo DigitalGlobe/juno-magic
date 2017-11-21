@@ -4,7 +4,10 @@ from setuptools.command.install import install as _install
 from notebook.nbextensions import install_nbextension
 from notebook.services.config import ConfigManager
 import os
+import sys
 
+with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as f:
+    requirements = f.readlines()
 extension_dir = os.path.join(os.path.dirname(__file__), "juno_magic", "static")
 
 class develop(_develop):
@@ -29,7 +32,7 @@ setup(name='juno-magic',
       author='Pramukta Kumar',
       author_email='pramukta.kumar@timbr.io',
       license='MIT',
-      packages=['juno_magic', 'juno_magic.extensions'],
+      packages=['juno_magic', 'juno_magic.extensions', 'juno_magic.util'],
       zip_safe=False,
       data_files=[
         ('share/jupyter/nbextensions/juno_magic', [
@@ -41,15 +44,5 @@ setup(name='juno-magic',
               "wampify = juno_magic.bridge:main"
           ]
       },
-      install_requires=[
-          "ipython",
-          "autobahn",
-          "twisted",
-          "txzmq",
-          "sh",
-          "pyopenssl",
-          "service_identity",
-          "requests",
-          "zope.interface"
-        ]
-      )
+      install_requires=requirements + (["sh"] if "win" not in sys.platform else [])
+)
