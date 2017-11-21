@@ -310,8 +310,13 @@ def main():
 
     def shutdown(result):
         log.msg("Comitting suicide")
-        IOLoop.current().stop()
-        exec "circusctl quit" in globals(), locals()
+        #IOLoop.current().stop()
+        import subprocess
+        proc = subprocess.Popen(["python", "-m", "circus.ctl", "quit"],
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+
 
     d = reconnector(args.shutdown_interval)
     d.addCallback(shutdown)
