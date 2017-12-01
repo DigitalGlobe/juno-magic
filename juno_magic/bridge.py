@@ -156,16 +156,22 @@ def build_bridge_class(client):
         @wamp.register(u"io.timbr.kernel.{}.ping".format(_key))
         def ping(self):
             self._has_been_pinged = True
+            response =  client.is_alive()
+            log.msg("PINGED from EXTERNAL APPLICATION: returned {}".format(response))
+
+        @wamp.register(u"io.timbr.kernel.{}._ping".format(_key))
+        def _ping(self):
             return client.is_alive()
 
         @inlineCallbacks
         def is_active(self, prefix):
             try:
-                response = yield self.call(u"{}.ping".format(prefix))
-                # log.msg("Ping response {}".format(response))
+                response = yield self.call(u"{}._ping".format(prefix))
                 returnValue(response)
             except ApplicationError:
-                returnValue(False)
+                response = False
+            finally:
+                log.msg("PINGED from WAMPIFY NETWORK: returned {}".format(response))
 
         def on_discovery(self, prefix):
             self.prefix_list.add(prefix)
@@ -177,10 +183,7 @@ def build_bridge_class(client):
             prefix_list = list(self.prefix_list)
             active_prefix_list = []
             for prefix in prefix_list:
-                # log.msg("Checking prefix {}".format(prefix))
-                # NOTE: Don't think this works and may be sensitive to timeout
                 is_active = yield self.is_active(prefix)
-                # log.msg("is_active set to {}".format(is_active))
                 if is_active is True:
                     active_prefix_list.append(prefix)
             self.prefix_list = set(active_prefix_list)
@@ -188,8 +191,6 @@ def build_bridge_class(client):
                 yield self.register(self.list, u"io.timbr.kernel.list")
             except ApplicationError:
                 pass
-            # log.msg("Prefix list is now {}".format(str(self.prefix_list)))
-
             returnValue(self.prefix_list)
 
         @inlineCallbacks
@@ -315,7 +316,6 @@ def main():
 
     d = reconnector(args.shutdown_interval)
     d.addCallback(shutdown)
-    # start the tornado io loop
     IOLoop.current().start()
 
 if __name__ == "__main__":
