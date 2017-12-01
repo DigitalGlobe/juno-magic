@@ -167,7 +167,6 @@ def build_bridge_class(client):
         def is_active(self, prefix):
             try:
                 response = yield self.call(u"{}._ping".format(prefix))
-                returnValue(response)
             except ApplicationError:
                 response = False
             finally:
