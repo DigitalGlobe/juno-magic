@@ -160,14 +160,14 @@ def build_bridge_class(client):
             log.msg("PINGED from EXTERNAL APPLICATION: returned {}".format(response))
             return response
 
-        @wamp.register(u"io.timbr.kernel.{}._ping".format(_key))
-        def _ping(self):
+        @wamp.register(u"io.timbr.kernel.{}.nw_ping".format(_key))
+        def nw_ping(self):
             return client.is_alive()
 
         @inlineCallbacks
         def is_active(self, prefix):
             try:
-                response = yield self.call(u"{}._ping".format(prefix))
+                response = yield self.call(u"{}.nw_ping".format(prefix))
             except ApplicationError:
                 response = False
             finally:
