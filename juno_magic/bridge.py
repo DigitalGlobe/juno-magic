@@ -158,6 +158,7 @@ def build_bridge_class(client):
             self._has_been_pinged = True
             response =  client.is_alive()
             log.msg("PINGED from EXTERNAL APPLICATION: returned {}".format(response))
+            return response
 
         @wamp.register(u"io.timbr.kernel.{}._ping".format(_key))
         def _ping(self):
