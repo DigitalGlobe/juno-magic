@@ -157,7 +157,7 @@ def build_bridge_class(client):
         def ping(self):
             self._has_been_pinged = True
             response =  client.is_alive()
-            log.msg("PINGED from EXTERNAL APPLICATION: returned {}".format(response))
+#            log.msg("PINGED from EXTERNAL APPLICATION: returned {}".format(response))
             return response
 
         @wamp.register(u"io.timbr.kernel.{}.nw_ping".format(_key))
@@ -171,7 +171,7 @@ def build_bridge_class(client):
             except ApplicationError:
                 response = False
             finally:
-                log.msg("PINGED from WAMPIFY NETWORK: returned {}".format(response))
+#                log.msg("PINGED from WAMPIFY NETWORK: returned {}".format(response))
                 returnValue(response)
 
         def on_discovery(self, prefix):
