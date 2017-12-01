@@ -172,6 +172,7 @@ def build_bridge_class(client):
                 response = False
             finally:
                 log.msg("PINGED from WAMPIFY NETWORK: returned {}".format(response))
+                returnValue(response)
 
         def on_discovery(self, prefix):
             self.prefix_list.add(prefix)
