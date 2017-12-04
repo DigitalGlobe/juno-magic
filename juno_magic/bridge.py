@@ -156,16 +156,23 @@ def build_bridge_class(client):
         @wamp.register(u"io.timbr.kernel.{}.ping".format(_key))
         def ping(self):
             self._has_been_pinged = True
+            response =  client.is_alive()
+#            log.msg("PINGED from EXTERNAL APPLICATION: returned {}".format(response))
+            return response
+
+        @wamp.register(u"io.timbr.kernel.{}.nw_ping".format(_key))
+        def nw_ping(self):
             return client.is_alive()
 
         @inlineCallbacks
         def is_active(self, prefix):
             try:
-                response = yield self.call(u"{}.ping".format(prefix))
-                # log.msg("Ping response {}".format(response))
-                returnValue(response)
+                response = yield self.call(u"{}.nw_ping".format(prefix))
             except ApplicationError:
-                returnValue(False)
+                response = False
+            finally:
+#                log.msg("PINGED from WAMPIFY NETWORK: returned {}".format(response))
+                returnValue(response)
 
         def on_discovery(self, prefix):
             self.prefix_list.add(prefix)
@@ -177,10 +184,7 @@ def build_bridge_class(client):
             prefix_list = list(self.prefix_list)
             active_prefix_list = []
             for prefix in prefix_list:
-                # log.msg("Checking prefix {}".format(prefix))
-                # NOTE: Don't think this works and may be sensitive to timeout
                 is_active = yield self.is_active(prefix)
-                # log.msg("is_active set to {}".format(is_active))
                 if is_active is True:
                     active_prefix_list.append(prefix)
             self.prefix_list = set(active_prefix_list)
@@ -188,8 +192,6 @@ def build_bridge_class(client):
                 yield self.register(self.list, u"io.timbr.kernel.list")
             except ApplicationError:
                 pass
-            # log.msg("Prefix list is now {}".format(str(self.prefix_list)))
-
             returnValue(self.prefix_list)
 
         @inlineCallbacks
@@ -244,9 +246,7 @@ def main():
     parser.add_argument("--wamp-realm", default=u"jupyter", help='Router realm')
     parser.add_argument("--wamp-url", default=u"ws://127.0.0.1:8123", help="WAMP Websocket URL")
     parser.add_argument("--token", type=unicode, help="OAuth token to connect to router")
-    parser.add_argument("--auto-shutdown", action="store_true",
-                        default=False, help="When set, disconnect and cleanup Wamp session when heartbeat times out and then stop the IOLoop")
-    parser.add_argument("--hb-interval", type=int, default=30, help="The heartbeat interval used when auto-shutdown is set")
+    parser.add_argument("--shutdown-interval", type=int, default=0, help="When set to positive non-zero value, shutdown remote processes after shutdown_interval number of seconds of no pings")
     parser.add_argument("file", help="Connection file")
     args = parser.parse_args()
 
@@ -278,14 +278,18 @@ def main():
                 proto._session._has_been_pinged = False
 
     @inlineCallbacks
-    def reconnector(shutdown_on_timeout):
+    def reconnector(shutdown_interval):
+        shutdown_on_timeout = False
+        if shutdown_interval > 0:
+            shutdown_on_timeout = True
         while True:
             try:
                 hb = None
                 log.msg("Attempting to connect...")
                 wampconnection = yield _bridge_runner.run(build_bridge_class(client), start_reactor=False)
-                hb = LoopingCall(heartbeat, (wampconnection))
-                hb.start(args.hb_interval, now=False)
+                if shutdown_on_timeout:
+                    hb = LoopingCall(heartbeat, (wampconnection))
+                    hb.start(shutdown_interval, now=False)
                 log.msg(wampconnection)
                 yield sleep(10.0) # Give the connection time to set _session
                 while wampconnection.isOpen():
@@ -301,13 +305,18 @@ def main():
                 log.msg("ConnectionRefusedError: Trying to reconnect... ")
                 yield sleep(1.0)
 
-
     def shutdown(result):
+        log.msg("Comitting suicide")
         IOLoop.current().stop()
+        import subprocess
+        proc = subprocess.Popen(["python", "-m", "circus.circusctl", "quit"],
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
 
-    d = reconnector(args.auto_shutdown)
+
+    d = reconnector(args.shutdown_interval)
     d.addCallback(shutdown)
-    # start the tornado io loop
     IOLoop.current().start()
 
 if __name__ == "__main__":
