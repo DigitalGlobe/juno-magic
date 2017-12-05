@@ -314,8 +314,11 @@ def main():
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
 
+    shutdown_interval = args.shutdown_interval
+    if shutdown_interval != os.environ.get('SHUTDOWN_INTERVAL'):
+        shutdown_interval = os.environ.get('SHUTDOWN_INTERVAL')
 
-    d = reconnector(args.shutdown_interval)
+    d = reconnector(shutdown_interval)
     d.addCallback(shutdown)
     IOLoop.current().start()
 
