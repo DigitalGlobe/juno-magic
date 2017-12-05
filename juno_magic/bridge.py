@@ -26,6 +26,7 @@ from txzmq import ZmqEndpoint, ZmqFactory, ZmqSubConnection
 
 import json
 import sys
+import os
 import argparse
 from pprint import pformat
 try:
@@ -314,8 +315,13 @@ def main():
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
 
+    shutdown_interval = args.shutdown_interval
+    try:
+        shutdown_interval = int(os.environ.get('SHUTDOWN_INTERVAL'))
+    except TypeError:
+        pass
 
-    d = reconnector(args.shutdown_interval)
+    d = reconnector(shutdown_interval)
     d.addCallback(shutdown)
     IOLoop.current().start()
 
